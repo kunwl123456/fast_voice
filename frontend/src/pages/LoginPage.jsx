@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { fetchMe, getStoredToken, loginUser } from "../api/client";
 
 export default function LoginPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const redirect = searchParams.get("redirect") || "/app";
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -14,6 +17,9 @@ export default function LoginPage() {
     const res = await loginUser({ email, password });
     setResult(res.data);
     setLoading(false);
+    if (res.data?.token) {
+      navigate(redirect, { replace: true });
+    }
   };
 
   const onCheckMe = async () => {
@@ -38,8 +44,11 @@ export default function LoginPage() {
             <div className="stat">Bearer token</div>
           </div>
           <div className="actions" style={{ marginTop: 12 }}>
-            <Link className="ghost-btn" to="/register">
+            <Link className="ghost-btn" to={`/register?redirect=${encodeURIComponent(redirect)}`}>
               去注册
+            </Link>
+            <Link className="ghost-btn" to="/">
+              返回首页
             </Link>
           </div>
         </div>

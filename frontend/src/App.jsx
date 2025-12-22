@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import TTSPage from "./pages/TTSPage";
 import VoiceCloningPage from "./pages/VoiceCloningPage";
@@ -10,6 +10,7 @@ import PlanPage from "./pages/PlanPage";
 import DevelopersPage from "./pages/DevelopersPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import { getStoredToken } from "./api/client";
 
 const links = [
   { to: "/", label: "首页" },
@@ -18,8 +19,18 @@ const links = [
   { to: "/voice-cloning", label: "克隆声音" },
   { to: "/discovery", label: "发现" },
   { to: "/credits", label: "积分" },
-  { to: "/login", label: "登录" },
+  { to: "/auth?redirect=/app", label: "登录" },
 ];
+
+function RequireAuth({ children }) {
+  const location = useLocation();
+  const authed = !!getStoredToken();
+  if (!authed) {
+    const redirect = encodeURIComponent(location.pathname || "/app");
+    return <Navigate to={`/auth?redirect=${redirect}`} replace />;
+  }
+  return children;
+}
 
 export default function App() {
   return (
@@ -51,7 +62,7 @@ export default function App() {
           <NavLink to="/tts" className="primary-btn">
             立即生成
           </NavLink>
-          <NavLink to="/login" className="ghost-btn">
+          <NavLink to="/auth?redirect=/app" className="ghost-btn">
             登录
           </NavLink>
         </div>
@@ -60,15 +71,44 @@ export default function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/app" element={<AppPortalPage />} />
+          <Route
+            path="/app"
+            element={
+              <RequireAuth>
+                <AppPortalPage />
+              </RequireAuth>
+            }
+          />
           <Route path="/tts" element={<TTSPage />} />
           <Route path="/voice-cloning" element={<VoiceCloningPage />} />
           <Route path="/discovery" element={<DiscoveryPage />} />
           <Route path="/credits" element={<CreditsPage />} />
-          <Route path="/story-studio" element={<StoryStudioPage />} />
-          <Route path="/plan" element={<PlanPage />} />
-          <Route path="/developers" element={<DevelopersPage />} />
+          <Route
+            path="/story-studio"
+            element={
+              <RequireAuth>
+                <StoryStudioPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/plan"
+            element={
+              <RequireAuth>
+                <PlanPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/developers"
+            element={
+              <RequireAuth>
+                <DevelopersPage />
+              </RequireAuth>
+            }
+          />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/auth" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Routes>
       </main>

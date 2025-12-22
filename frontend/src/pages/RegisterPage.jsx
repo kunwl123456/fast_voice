@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { fetchMe, registerUser } from "../api/client";
 
 export default function RegisterPage() {
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const redirect = searchParams.get("redirect") || "/app";
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -16,6 +18,9 @@ export default function RegisterPage() {
     const res = await registerUser({ email, password, username });
     setResult(res.data);
     setLoading(false);
+    if (res.data?.token) {
+      navigate(redirect, { replace: true });
+    }
   };
 
   const onCheckMe = async () => {
@@ -40,7 +45,7 @@ export default function RegisterPage() {
             <div className="stat">内存/Redis 双写</div>
           </div>
           <div className="actions" style={{ marginTop: 12 }}>
-            <Link className="ghost-btn" to="/login">
+            <Link className="ghost-btn" to={`/auth?redirect=${encodeURIComponent(redirect)}`}>
               去登录
             </Link>
             <button className="ghost-btn" type="button" onClick={() => navigate(-1)}>
