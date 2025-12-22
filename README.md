@@ -11,6 +11,11 @@
 - `Fish_Audio_需求文档.md` 原需求文档
 
 ## 快速启动
+
+```
+conda activate fish-backend
+```
+
 ### 后端
 ```bash
 cd backend

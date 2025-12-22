@@ -4,9 +4,14 @@ import TTSPage from "./pages/TTSPage";
 import VoiceCloningPage from "./pages/VoiceCloningPage";
 import DiscoveryPage from "./pages/DiscoveryPage";
 import CreditsPage from "./pages/CreditsPage";
+import AppPortalPage from "./pages/AppPortalPage";
+import StoryStudioPage from "./pages/StoryStudioPage";
+import PlanPage from "./pages/PlanPage";
+import DevelopersPage from "./pages/DevelopersPage";
 
 const links = [
   { to: "/", label: "首页" },
+  { to: "/app", label: "应用" },
   { to: "/tts", label: "语音合成" },
   { to: "/voice-cloning", label: "克隆声音" },
   { to: "/discovery", label: "发现" },
@@ -49,10 +54,14 @@ export default function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/app" element={<AppPortalPage />} />
           <Route path="/tts" element={<TTSPage />} />
           <Route path="/voice-cloning" element={<VoiceCloningPage />} />
           <Route path="/discovery" element={<DiscoveryPage />} />
           <Route path="/credits" element={<CreditsPage />} />
+          <Route path="/story-studio" element={<StoryStudioPage />} />
+          <Route path="/plan" element={<PlanPage />} />
+          <Route path="/developers" element={<DevelopersPage />} />
         </Routes>
       </main>
     </div>
