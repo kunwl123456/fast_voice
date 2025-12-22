@@ -81,7 +81,7 @@ async def refund(
     )
 
 
-async def admin_adjust(
+async def recharge(
     *,
     db: AsyncSession,
     project_id: int,
@@ -89,15 +89,15 @@ async def admin_adjust(
     note: str,
     ref_id: str = "",
 ) -> None:
-    """管理员调账（V1 代替充值）。"""
+    """充值。"""
     acc = await get_or_create_account(db, project_id)
     acc.balance += amount
     db.add(
         CreditTransaction(
             account_id=acc.id,
-            tx_type=TxType.admin_adjust,
+            tx_type=TxType.recharge,
             amount=amount,
-            ref_type="admin",
+            ref_type="recharge",
             ref_id=str(ref_id),
             note=note,
         )

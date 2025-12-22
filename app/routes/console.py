@@ -4,23 +4,30 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import create_access_token, encrypt_api_secret, generate_api_key, generate_api_secret, hash_password, verify_password
 from app.deps import get_db, require_admin, require_console_user
 from app.models import ApiKey, CreditTransaction, Project, User
+from app.services.billing import get_or_create_account, recharge
+from app.services.bootstrap import ensure_user_default_project
+from app.core.security import (
+    create_access_token,
+    encrypt_api_secret,
+    generate_api_key,
+    generate_api_secret,
+    hash_password,
+    verify_password
+)
 from app.schemas import (
-    AdminAdjustCreditsIn,
     ApiKeyOut,
     ChangePasswordIn,
     CreditAccountOut,
     CreditTxOut,
     LoginIn,
     MeOut,
+    RechargeIn,
     RegisterIn,
     RenameIn,
     TokenOut,
 )
-from app.services.billing import admin_adjust, get_or_create_account
-from app.services.bootstrap import ensure_user_default_project
 
 router = APIRouter(prefix="/console", tags=["console"])
 
@@ -121,9 +128,9 @@ async def credit_transactions(db: AsyncSession = Depends(get_db), user: User = D
     ]
 
 
-@router.post("/admin/credits/adjust")
-async def admin_adjust_credits(payload: AdminAdjustCreditsIn, db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
-    await admin_adjust(db=db, project_id=payload.project_id, amount=payload.amount, note=payload.note)
+@router.post("/admin/credits/recharge")
+async def recharge_credits(payload: RechargeIn, db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
+    await recharge(db=db, project_id=payload.project_id, amount=payload.amount, note=payload.note)
     return {"ok": True}
 
 

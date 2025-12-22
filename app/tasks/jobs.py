@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import os
 import wave
-from datetime import datetime
 
 from celery.utils.log import get_task_logger
 from sqlalchemy import select
 
 from app.db_sync import SessionLocalSync
-from app.models import CloneJob, JobStatus, TTSJob, Voice
+from app.models import CloneJob, JobStatus, TTSJob, Voice, format_timezone
 from app.services.billing_sync import refund
 from app.services.storage import job_dir
 from app.tasks.celery_app import celery_app
@@ -36,7 +35,7 @@ def run_tts_job(job_id: int) -> None:
         if not job:
             return
         job.status = JobStatus.running
-        job.updated_at = datetime.utcnow()
+        job.updated_at = format_timezone()
         db.commit()
 
     try:
@@ -47,7 +46,7 @@ def run_tts_job(job_id: int) -> None:
             job = db.execute(select(TTSJob).where(TTSJob.id == job_id)).scalar_one()
             job.status = JobStatus.succeeded
             job.output_audio_path = out_path
-            job.updated_at = datetime.utcnow()
+            job.updated_at = format_timezone()
             db.commit()
     except Exception as e:
         logger.exception("tts job failed: %s", e)
@@ -57,7 +56,7 @@ def run_tts_job(job_id: int) -> None:
                 return
             job.status = JobStatus.failed
             job.error = "tts_failed"
-            job.updated_at = datetime.utcnow()
+            job.updated_at = format_timezone()
             refund(db=db, project_id=job.project_id, amount=job.cost_credits, ref_type="tts", ref_id=str(job.id))
             db.commit()
 
@@ -69,7 +68,7 @@ def run_clone_job(job_id: int) -> None:
         if not job:
             return
         job.status = JobStatus.running
-        job.updated_at = datetime.utcnow()
+        job.updated_at = format_timezone()
         db.commit()
 
     try:
@@ -91,7 +90,7 @@ def run_clone_job(job_id: int) -> None:
             v.preview_audio_path = preview_path
             job.result_voice_id = v.id
             job.status = JobStatus.succeeded
-            job.updated_at = datetime.utcnow()
+            job.updated_at = format_timezone()
             db.commit()
     except Exception as e:
         logger.exception("clone job failed: %s", e)
@@ -101,7 +100,7 @@ def run_clone_job(job_id: int) -> None:
                 return
             job.status = JobStatus.failed
             job.error = "clone_failed"
-            job.updated_at = datetime.utcnow()
+            job.updated_at = format_timezone()
             db.commit()
 
 

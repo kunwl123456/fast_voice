@@ -5,7 +5,8 @@ import hashlib
 import hmac
 import secrets
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from cryptography.fernet import Fernet, InvalidToken
 from jose import JWTError, jwt
@@ -26,7 +27,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(*, subject: str, extra: dict | None = None) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
     payload = {
         "iss": settings.jwt_issuer,
         "sub": subject,

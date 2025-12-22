@@ -55,9 +55,9 @@ class CreditTxOut(BaseModel):
     created_at: str
 
 
-class AdminAdjustCreditsIn(BaseModel):
+class RechargeIn(BaseModel):
     project_id: int
-    amount: int  # positive or negative
+    amount: int = Field(gt=0, description="充值金额（必须为正数）")
     note: str = ""
 
 
