@@ -8,6 +8,8 @@ import AppPortalPage from "./pages/AppPortalPage";
 import StoryStudioPage from "./pages/StoryStudioPage";
 import PlanPage from "./pages/PlanPage";
 import DevelopersPage from "./pages/DevelopersPage";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
 
 const links = [
   { to: "/", label: "首页" },
@@ -16,6 +18,7 @@ const links = [
   { to: "/voice-cloning", label: "克隆声音" },
   { to: "/discovery", label: "发现" },
   { to: "/credits", label: "积分" },
+  { to: "/login", label: "登录" },
 ];
 
 export default function App() {
@@ -48,6 +51,9 @@ export default function App() {
           <NavLink to="/tts" className="primary-btn">
             立即生成
           </NavLink>
+          <NavLink to="/login" className="ghost-btn">
+            登录
+          </NavLink>
         </div>
       </header>
 
@@ -62,6 +68,8 @@ export default function App() {
           <Route path="/story-studio" element={<StoryStudioPage />} />
           <Route path="/plan" element={<PlanPage />} />
           <Route path="/developers" element={<DevelopersPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
         </Routes>
       </main>
     </div>

@@ -4,6 +4,38 @@ export const api = axios.create({
   baseURL: "/",
 });
 
+function setAuthHeader(token) {
+  if (token) {
+    api.defaults.headers.common.Authorization = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common.Authorization;
+  }
+}
+
+export function persistToken(token) {
+  try {
+    if (typeof localStorage !== "undefined" && token) {
+      localStorage.setItem("fa_token", token);
+      setAuthHeader(token);
+    }
+  } catch (e) {
+    // ignore storage failure
+  }
+}
+
+export function getStoredToken() {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const token = localStorage.getItem("fa_token");
+      if (token) setAuthHeader(token);
+      return token;
+    }
+  } catch (e) {
+    return null;
+  }
+  return null;
+}
+
 export async function fetchVoices(params = {}) {
   const res = await api.get("/api/discovery/voices", { params });
   return res.data;
@@ -35,6 +67,25 @@ export async function placeholderTTS(payload) {
 
 export async function placeholderCreateVoice(payload) {
   const res = await api.post("/api/voice-cloning/create", payload, { validateStatus: () => true });
+  return res;
+}
+
+export async function registerUser(payload) {
+  const res = await api.post("/api/auth/register", payload, { validateStatus: (s) => s < 500 });
+  if (res.data?.token) persistToken(res.data.token);
+  return res;
+}
+
+export async function loginUser(payload) {
+  const res = await api.post("/api/auth/login", payload, { validateStatus: (s) => s < 500 });
+  if (res.data?.token) persistToken(res.data.token);
+  return res;
+}
+
+export async function fetchMe(token) {
+  const tk = token || getStoredToken();
+  if (tk) setAuthHeader(tk);
+  const res = await api.get("/api/auth/me", { validateStatus: (s) => s < 500 });
   return res;
 }
 
