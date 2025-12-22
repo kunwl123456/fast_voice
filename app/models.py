@@ -45,7 +45,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))  # bcrypt hash
     display_name: Mapped[str] = mapped_column(String(100), default="")  # 展示名
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)  # 管理员：可调账
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=format_timezone)  # 创建时间
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)  # 创建时间
 
     projects: Mapped[list["Project"]] = relationship(back_populates="owner")  # 拥有的项目
 
@@ -62,7 +62,7 @@ class Project(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)  # 所属用户
     name: Mapped[str] = mapped_column(String(120), default="default")  # 项目名
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=format_timezone)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
 
     owner: Mapped["User"] = relationship(back_populates="projects")
     api_keys: Mapped[list["ApiKey"]] = relationship(back_populates="project")
@@ -82,7 +82,7 @@ class ApiKey(Base):
     api_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)  # 公开 key（请求头 X-API-Key）
     api_secret_ciphertext: Mapped[str] = mapped_column(Text)  # Fernet 加密后的 secret
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)  # 是否启用
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=format_timezone)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
 
     project: Mapped["Project"] = relationship(back_populates="api_keys")
 
@@ -98,7 +98,7 @@ class CreditAccount(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), unique=True, index=True)  # 1 project : 1 account
     balance: Mapped[int] = mapped_column(Integer, default=0)  # 当前余额（积分）
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=format_timezone)  # 最近更新时间
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)  # 最近更新时间
 
     project: Mapped["Project"] = relationship(back_populates="credit_account")
     transactions: Mapped[list["CreditTransaction"]] = relationship(back_populates="account")
@@ -119,7 +119,7 @@ class CreditTransaction(Base):
     ref_type: Mapped[str] = mapped_column(String(50), default="")  # 关联对象类型（tts/clone/admin）
     ref_id: Mapped[str] = mapped_column(String(100), default="")  # 关联对象 id（job id）
     note: Mapped[str] = mapped_column(String(255), default="")  # 备注
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=format_timezone)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
 
     account: Mapped["CreditAccount"] = relationship(back_populates="transactions")
 
@@ -139,7 +139,7 @@ class Voice(Base):
     description: Mapped[str] = mapped_column(String(255), default="")  # 描述
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, index=True)  # 是否公开
     preview_audio_path: Mapped[str] = mapped_column(String(255), default="")  # 本地预览音频路径
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=format_timezone)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
 
 
 class TTSJob(Base):
@@ -159,8 +159,8 @@ class TTSJob(Base):
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.queued, index=True)
     error: Mapped[str] = mapped_column(String(255), default="")  # 错误码（失败时）
     output_audio_path: Mapped[str] = mapped_column(String(255), default="")  # 产出音频本地路径
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=format_timezone)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=format_timezone)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
 
 
 class CloneJob(Base):
@@ -179,7 +179,7 @@ class CloneJob(Base):
     error: Mapped[str] = mapped_column(String(255), default="")
     dataset_dir: Mapped[str] = mapped_column(String(255), default="")  # 本地数据集目录（上传文件落这里）
     result_voice_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 成功后关联 voices.id
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=format_timezone)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=format_timezone)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
 
 
