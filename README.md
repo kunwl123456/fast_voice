@@ -37,3 +37,12 @@ npm run dev
 - 更多接口示例见 `backend/README.md` 与 `frontend/README.md`。
 - 发现模块使用 Redis 持久化数据（默认 redis://localhost:6379/0），Redis 不可用时自动回退示例数据。
 
+## 启动 Redis（Ubuntu/WSL 示例）
+```bash
+sudo apt update
+sudo apt install -y redis-server
+sudo service redis-server start    # 或 sudo systemctl start redis-server
+redis-cli ping                     # 返回 PONG 即运行正常
+```
+默认连接：`redis://localhost:6379/0`，可通过环境变量 `REDIS_URL` 修改地址/库号。后端重启后会读取新配置。
+
