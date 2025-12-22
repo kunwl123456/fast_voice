@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { fetchMe, registerUser } from "../api/client";
 
-export default function RegisterPage() {
+export default function RegisterPage({ onRegister }) {
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,6 +19,7 @@ export default function RegisterPage() {
     setResult(res.data);
     setLoading(false);
     if (res.data?.token) {
+      if (onRegister && res.data?.user) onRegister(res.data.user);
       navigate(redirect, { replace: true });
     }
   };

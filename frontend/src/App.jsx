@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import HomePage from "./pages/HomePage";
 import TTSPage from "./pages/TTSPage";
 import VoiceCloningPage from "./pages/VoiceCloningPage";
@@ -10,7 +11,7 @@ import PlanPage from "./pages/PlanPage";
 import DevelopersPage from "./pages/DevelopersPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
-import { getStoredToken } from "./api/client";
+import { fetchMe, getStoredToken } from "./api/client";
 
 const links = [
   { to: "/", label: "首页" },
@@ -33,6 +34,16 @@ function RequireAuth({ children }) {
 }
 
 export default function App() {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const token = getStoredToken();
+    if (!token) return;
+    fetchMe(token).then((res) => {
+      if (res.status < 400) setUser(res.data);
+    });
+  }, []);
+
   return (
     <div className="page">
       <header className="topbar">
@@ -62,9 +73,19 @@ export default function App() {
           <NavLink to="/tts" className="primary-btn">
             立即生成
           </NavLink>
-          <NavLink to="/auth?redirect=/app" className="ghost-btn">
-            登录
-          </NavLink>
+          {user ? (
+            <div className="user-chip">
+              <div className="user-avatar">{(user.username || user.email || "U")[0].toUpperCase()}</div>
+              <div className="user-meta">
+                <div className="user-name">{user.username || user.email}</div>
+                <div className="user-email">{user.email}</div>
+              </div>
+            </div>
+          ) : (
+            <NavLink to="/auth?redirect=/app" className="ghost-btn">
+              登录
+            </NavLink>
+          )}
         </div>
       </header>
 
@@ -75,7 +96,7 @@ export default function App() {
             path="/app"
             element={
               <RequireAuth>
-                <AppPortalPage />
+                <AppPortalPage user={user} />
               </RequireAuth>
             }
           />
@@ -107,9 +128,9 @@ export default function App() {
               </RequireAuth>
             }
           />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/auth" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/login" element={<LoginPage onLogin={setUser} />} />
+          <Route path="/auth" element={<LoginPage onLogin={setUser} />} />
+          <Route path="/register" element={<RegisterPage onRegister={setUser} />} />
         </Routes>
       </main>
     </div>

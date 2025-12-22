@@ -46,7 +46,7 @@ const quickActions = [
   },
 ];
 
-export default function AppPortalPage() {
+export default function AppPortalPage({ user }) {
   const location = useLocation();
   const [prompt, setPrompt] = useState("介绍一下 Fish Audio S1，并推荐一个适合旁白的声音。");
   const [generateResult, setGenerateResult] = useState(null);
@@ -117,6 +117,19 @@ export default function AppPortalPage() {
           </Link>
           <Link className="ghost-btn" to="/developers">
             开发者入口
+          </Link>
+        </div>
+
+        <div className="sidebar-user card">
+          <div className="user-chip" style={{ width: "100%" }}>
+            <div className="user-avatar">{((user?.username || user?.email || "U")[0] || "U").toUpperCase()}</div>
+            <div className="user-meta">
+              <div className="user-name">{user?.username || user?.email || "已登录用户"}</div>
+              <div className="user-email">{user?.email || "已登录"}</div>
+            </div>
+          </div>
+          <Link className="ghost-btn" to="/profile" style={{ marginTop: 8 }}>
+            个人资料
           </Link>
         </div>
       </aside>

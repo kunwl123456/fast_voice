@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { fetchMe, getStoredToken, loginUser } from "../api/client";
 
-export default function LoginPage() {
+export default function LoginPage({ onLogin }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -18,6 +18,7 @@ export default function LoginPage() {
     setResult(res.data);
     setLoading(false);
     if (res.data?.token) {
+      if (onLogin && res.data?.user) onLogin(res.data.user);
       navigate(redirect, { replace: true });
     }
   };
