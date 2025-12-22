@@ -23,6 +23,17 @@ export function persistToken(token) {
   }
 }
 
+export function clearToken() {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem("fa_token");
+    }
+  } catch (e) {
+    // ignore
+  }
+  setAuthHeader(null);
+}
+
 export function getStoredToken() {
   try {
     if (typeof localStorage !== "undefined") {
@@ -86,6 +97,37 @@ export async function fetchMe(token) {
   const tk = token || getStoredToken();
   if (tk) setAuthHeader(tk);
   const res = await api.get("/api/auth/me", { validateStatus: (s) => s < 500 });
+  return res;
+}
+
+export async function fetchProfile() {
+  const res = await api.get("/api/auth/profile", { validateStatus: (s) => s < 500 });
+  return res;
+}
+
+export async function updateProfile(payload) {
+  const res = await api.patch("/api/auth/profile", payload, { validateStatus: (s) => s < 500 });
+  return res;
+}
+
+export async function changePassword(payload) {
+  const res = await api.post("/api/auth/password/change", payload, { validateStatus: (s) => s < 500 });
+  return res;
+}
+
+export async function changeEmail(payload) {
+  const res = await api.post("/api/auth/email/change", payload, { validateStatus: (s) => s < 500 });
+  return res;
+}
+
+export async function uploadAvatar(payload) {
+  const res = await api.post("/api/auth/avatar", payload, { validateStatus: (s) => s < 500 });
+  return res;
+}
+
+export async function logoutUser() {
+  const res = await api.post("/api/auth/logout", {}, { validateStatus: (s) => s < 500 });
+  clearToken();
   return res;
 }
 

@@ -1,5 +1,5 @@
-import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import TTSPage from "./pages/TTSPage";
 import VoiceCloningPage from "./pages/VoiceCloningPage";
@@ -11,7 +11,8 @@ import PlanPage from "./pages/PlanPage";
 import DevelopersPage from "./pages/DevelopersPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
-import { fetchMe, getStoredToken } from "./api/client";
+import ProfilePage from "./pages/ProfilePage";
+import { clearToken, fetchMe, getStoredToken, logoutUser } from "./api/client";
 
 const links = [
   { to: "/", label: "首页" },
@@ -20,7 +21,6 @@ const links = [
   { to: "/voice-cloning", label: "克隆声音" },
   { to: "/discovery", label: "发现" },
   { to: "/credits", label: "积分" },
-  { to: "/auth?redirect=/app", label: "登录" },
 ];
 
 function RequireAuth({ children }) {
@@ -43,6 +43,12 @@ export default function App() {
       if (res.status < 400) setUser(res.data);
     });
   }, []);
+
+  const handleLogout = async () => {
+    await logoutUser();
+    clearToken();
+    setUser(null);
+  };
 
   return (
     <div className="page">
@@ -74,13 +80,9 @@ export default function App() {
             立即生成
           </NavLink>
           {user ? (
-            <div className="user-chip">
-              <div className="user-avatar">{(user.username || user.email || "U")[0].toUpperCase()}</div>
-              <div className="user-meta">
-                <div className="user-name">{user.username || user.email}</div>
-                <div className="user-email">{user.email}</div>
-              </div>
-            </div>
+            <NavLink to="/profile" className="ghost-btn">
+              {user.username || user.email}
+            </NavLink>
           ) : (
             <NavLink to="/auth?redirect=/app" className="ghost-btn">
               登录
@@ -125,6 +127,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <DevelopersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <RequireAuth>
+                <ProfilePage user={user} onChangeUser={setUser} onLogout={handleLogout} />
               </RequireAuth>
             }
           />
