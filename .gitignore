@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+
+# Environment / tooling
+.env
+.DS_Store
+
+# Node / frontend
+node_modules/
+dist/
+*.log
+
+# Vite
+.vite/
+
+# Coverage / pytest
+.coverage
+htmlcov/
+.pytest_cache/
+
