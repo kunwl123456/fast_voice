@@ -1,3 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# local data / artifacts
+data/
+*.db
+
+# legacy folder (can be removed)
+backend/
 # Python
 __pycache__/
 *.pyc
@@ -23,4 +34,6 @@ dist/
 .coverage
 htmlcov/
 .pytest_cache/
+
+.idea/
 

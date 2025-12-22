@@ -1,0 +1,78 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/fast_voice
+      DATABASE_URL_SYNC: postgresql+psycopg://postgres:postgres@db:5432/fast_voice
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      JWT_SECRET: change-me
+      API_SECRET_ENC_KEY: change-me-32-bytes-base64-fernet-key
+      AUTO_CREATE_DB: "1"
+      ADMIN_BOOTSTRAP: "1"
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: admin12345
+      CREDIT_PRICE_PER_UTF8_BYTE: "1"
+      SIGNATURE_TIME_WINDOW_SECONDS: "300"
+      MAX_TEXT_UTF8_BYTES: "4000"
+      DATA_DIR: /data
+      DB_POOL_SIZE: "10"
+      DB_MAX_OVERFLOW: "20"
+      DB_POOL_TIMEOUT_SECONDS: "30"
+      DB_POOL_RECYCLE_SECONDS: "1800"
+    volumes:
+      - fast_voice_data:/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["uv", "run", "celery", "-A", "app.tasks.celery_app:celery_app", "worker", "-l", "INFO", "-Q", "tts,clone"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/fast_voice
+      DATABASE_URL_SYNC: postgresql+psycopg://postgres:postgres@db:5432/fast_voice
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      JWT_SECRET: change-me
+      API_SECRET_ENC_KEY: change-me-32-bytes-base64-fernet-key
+      AUTO_CREATE_DB: "1"
+      ADMIN_BOOTSTRAP: "1"
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: admin12345
+      CREDIT_PRICE_PER_UTF8_BYTE: "1"
+      SIGNATURE_TIME_WINDOW_SECONDS: "300"
+      MAX_TEXT_UTF8_BYTES: "4000"
+      DATA_DIR: /data
+      DB_POOL_SIZE: "10"
+      DB_MAX_OVERFLOW: "20"
+      DB_POOL_TIMEOUT_SECONDS: "30"
+      DB_POOL_RECYCLE_SECONDS: "1800"
+    volumes:
+      - fast_voice_data:/data
+    depends_on:
+      - db
+      - redis
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: fast_voice
+    volumes:
+      - fast_voice_db:/var/lib/postgresql/data
+  redis:
+    image: redis:7
+
+volumes:
+  fast_voice_db:
+  fast_voice_data:
+
+
