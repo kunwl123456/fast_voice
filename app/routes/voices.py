@@ -6,6 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db, require_console_user
 from app.models import User, Voice
+from app.responses import (
+    success_response,
+    not_found_response,
+    forbidden_response,
+)
 from app.schemas import VoiceOut, VoiceUpdateIn
 from app.services.storage import to_public_file_url
 
@@ -19,37 +24,80 @@ def _voice_out(v: Voice) -> VoiceOut:
         name=v.name,
         description=v.description,
         is_public=v.is_public,
-        preview_audio_url=to_public_file_url(v.preview_audio_path) if v.preview_audio_path else "",
+        preview_audio_url=(
+            to_public_file_url(v.preview_audio_path) if v.preview_audio_path else ""
+        ),
     )
 
 
-@console_router.get("/voices/mine", response_model=list[VoiceOut])
-async def my_voices(db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)):
-    voices = (await db.execute(select(Voice).where(Voice.owner_user_id == user.id).order_by(Voice.id.desc()))).scalars().all()
-    return [_voice_out(v) for v in voices]
+@console_router.get("/voices/mine")
+async def my_voices(
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
+):
+    """获取我的音色列表"""
+    voices = (
+        (
+            await db.execute(
+                select(Voice)
+                .where(Voice.owner_user_id == user.id)
+                .order_by(Voice.id.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    voices_data = [_voice_out(v).model_dump() for v in voices]
+    return success_response("获取成功", voices_data)
 
 
-@console_router.patch("/voices/{voice_id}", response_model=VoiceOut)
-async def update_voice(voice_id: int, payload: VoiceUpdateIn, db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)):
-    v = (await db.execute(select(Voice).where(Voice.id == voice_id))).scalar_one_or_none()
+@console_router.patch("/voices/{voice_id}")
+async def update_voice(
+    voice_id: int,
+    payload: VoiceUpdateIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console_user),
+):
+    """更新音色信息"""
+    v = (
+        await db.execute(select(Voice).where(Voice.id == voice_id))
+    ).scalar_one_or_none()
     if not v:
-        raise HTTPException(status_code=404, detail="voice_not_found")
+        raise HTTPException(
+            status_code=404,
+            detail=not_found_response("音色不存在", {"voice_id": voice_id}),
+        )
     if v.owner_user_id != user.id:
-        raise HTTPException(status_code=403, detail="not_owner")
+        raise HTTPException(
+            status_code=403, detail=forbidden_response("无权修改该音色")
+        )
     if payload.description is not None:
         v.description = payload.description
     if payload.is_public is not None:
         v.is_public = payload.is_public
     db.add(v)
     await db.flush()
-    return _voice_out(v)
+
+    voice_data = _voice_out(v)
+    return success_response("更新成功", voice_data.model_dump())
 
 
-@console_router.get("/voices/public", response_model=list[VoiceOut])
-@openapi_router.get("/voices/public", response_model=list[VoiceOut])
+@console_router.get("/voices/public")
+@openapi_router.get("/voices/public")
 async def public_voices(db: AsyncSession = Depends(get_db)):
-    voices = (await db.execute(select(Voice).where(Voice.is_public == True).order_by(Voice.id.desc()).limit(200))).scalars().all()
-    return [_voice_out(v) for v in voices]
+    """获取公共音色列表"""
+    voices = (
+        (
+            await db.execute(
+                select(Voice)
+                .where(Voice.is_public.is_(True))
+                .order_by(Voice.id.desc())
+                .limit(200)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
-
-
+    voices_data = [_voice_out(v).model_dump() for v in voices]
+    return success_response("获取成功", voices_data)

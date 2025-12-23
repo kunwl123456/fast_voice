@@ -1,21 +1,39 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
 
-from app.deps import get_db, require_admin, require_console_user
-from app.models import ApiKey, ApiRequestLog, CreditAccount, CreditTransaction, SubscriptionPlan, TxType, User, Voice
+from app.models import (
+    ApiKey,
+    ApiRequestLog,
+    CreditAccount,
+    CreditTransaction,
+    SubscriptionPlan,
+    TxType,
+    User,
+    Voice,
+)
+from app.responses import (
+    success_response,
+    created_response,
+    conflict_response,
+    unauthorized_response,
+    forbidden_response,
+    not_found_response,
+    bad_request_response,
+)
 from app.services.billing import get_or_create_account, recharge
 from app.subscription import get_plan_config, get_plan_features
+from app.deps import get_db, require_admin, require_console_user
 from app.core.security import (
     create_access_token,
     encrypt_api_secret,
     generate_api_key,
     generate_api_secret,
     hash_password,
-    verify_password
+    verify_password,
 )
 from app.schemas import (
     ApiKeyListItem,
@@ -33,19 +51,24 @@ from app.schemas import (
     RequestLogOut,
     SubscriptionInfo,
     TokenOut,
+    UsageStatsOut,
     UpdateAvatarIn,
     UpgradeSubscriptionIn,
-    UsageStatsOut,
+    PaginatedRequestLogs,
 )
 
 router = APIRouter(prefix="/console", tags=["console"])
 
 
-@router.post("/auth/register", response_model=MeOut)
+@router.post("/auth/register")
 async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
-    existed = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
+    """用户注册"""
+    existed = (
+        await db.execute(select(User).where(User.email == payload.email))
+    ).scalar_one_or_none()
     if existed:
-        raise HTTPException(status_code=409, detail="email_exists")
+        return conflict_response("该邮箱已被注册", {"email": payload.email})
+
     u = User(
         email=payload.email,
         password_hash=hash_password(payload.password),
@@ -54,145 +77,186 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
     )
     db.add(u)
     await db.flush()
-    
+
     # 创建积分账户并赠送免费版初始积分
     acc = CreditAccount(user_id=u.id, balance=1000)
     db.add(acc)
     await db.flush()
-    
+
     # 记录积分流水
     tx = CreditTransaction(
         account_id=acc.id,
         tx_type=TxType.subscription,
         amount=1000,
         ref_type="subscription",
-        ref_id=f"free_welcome",
+        ref_id="free_welcome",
         note="注册赠送免费版积分",
     )
     db.add(tx)
-    
-    return MeOut(
+
+    user_data = MeOut(
         id=u.id,
         email=u.email,
         display_name=u.display_name,
         avatar_url=u.avatar_url,
         is_admin=u.is_admin,
         subscription_plan=u.subscription_plan.value,
-        subscription_ends_at=u.subscription_ends_at.isoformat() if u.subscription_ends_at else None,
+        subscription_ends_at=(
+            u.subscription_ends_at.isoformat() if u.subscription_ends_at else None
+        ),
     )
 
+    return created_response("注册成功", user_data.model_dump())
 
-@router.post("/auth/login", response_model=TokenOut)
+
+@router.post("/auth/login")
 async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
-    u = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
+    """用户登录"""
+    u = (
+        await db.execute(select(User).where(User.email == payload.email))
+    ).scalar_one_or_none()
     if not u or not verify_password(payload.password, u.password_hash):
-        raise HTTPException(status_code=401, detail="invalid_credentials")
+        return unauthorized_response("用户名或密码错误")
+
     token = create_access_token(subject=f"user:{u.id}")
-    return TokenOut(access_token=token)
+    token_data = TokenOut(access_token=token)
+
+    return success_response("登录成功", token_data.model_dump())
 
 
-@router.get("/me", response_model=MeOut)
+@router.get("/me")
 def me(user: User = Depends(require_console_user)):
-    return MeOut(
+    """获取当前用户信息"""
+    user_data = MeOut(
         id=user.id,
         email=user.email,
         display_name=user.display_name,
         avatar_url=user.avatar_url,
         is_admin=user.is_admin,
         subscription_plan=user.subscription_plan.value,
-        subscription_ends_at=user.subscription_ends_at.isoformat() if user.subscription_ends_at else None,
+        subscription_ends_at=(
+            user.subscription_ends_at.isoformat() if user.subscription_ends_at else None
+        ),
     )
+    return success_response("获取成功", user_data.model_dump())
 
 
-@router.post("/me/rename", response_model=MeOut)
-async def rename(payload: RenameIn, db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)):
+@router.post("/me/rename")
+async def rename(
+    payload: RenameIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console_user),
+):
+    """修改用户昵称"""
     user.display_name = payload.display_name
     db.add(user)
     await db.flush()
-    return MeOut(
+
+    user_data = MeOut(
         id=user.id,
         email=user.email,
         display_name=user.display_name,
         avatar_url=user.avatar_url,
         is_admin=user.is_admin,
         subscription_plan=user.subscription_plan.value,
-        subscription_ends_at=user.subscription_ends_at.isoformat() if user.subscription_ends_at else None,
+        subscription_ends_at=(
+            user.subscription_ends_at.isoformat() if user.subscription_ends_at else None
+        ),
     )
+    return success_response("修改成功", user_data.model_dump())
 
 
-@router.post("/me/avatar", response_model=MeOut)
-async def update_avatar(payload: UpdateAvatarIn, db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)):
+@router.post("/me/avatar")
+async def update_avatar(
+    payload: UpdateAvatarIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console_user),
+):
     """更新用户头像"""
     user.avatar_url = payload.avatar_url
     db.add(user)
     await db.flush()
-    return MeOut(
+
+    user_data = MeOut(
         id=user.id,
         email=user.email,
         display_name=user.display_name,
         avatar_url=user.avatar_url,
         is_admin=user.is_admin,
         subscription_plan=user.subscription_plan.value,
-        subscription_ends_at=user.subscription_ends_at.isoformat() if user.subscription_ends_at else None,
+        subscription_ends_at=(
+            user.subscription_ends_at.isoformat() if user.subscription_ends_at else None
+        ),
     )
+    return success_response("更新成功", user_data.model_dump())
 
 
 @router.post("/me/change-password")
-async def change_password(payload: ChangePasswordIn, db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)):
+async def change_password(
+    payload: ChangePasswordIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console_user),
+):
+    """修改密码"""
     if not verify_password(payload.old_password, user.password_hash):
-        raise HTTPException(status_code=400, detail="wrong_old_password")
+        return bad_request_response("原密码错误")
     user.password_hash = hash_password(payload.new_password)
     db.add(user)
-    return {"ok": True}
+    return success_response("密码修改成功")
 
 
-@router.get("/subscription", response_model=SubscriptionInfo)
+@router.get("/subscription")
 async def get_subscription(user: User = Depends(require_console_user)):
     """获取当前订阅信息"""
     plan_config = get_plan_config(user.subscription_plan.value)
-    
+
     # 判断订阅状态
     status = "active"
     if user.subscription_ends_at:
         if user.subscription_ends_at < datetime.now():
             status = "expired"
-    
-    return SubscriptionInfo(
+
+    subscription_data = SubscriptionInfo(
         plan=user.subscription_plan.value,
         plan_name=plan_config.name,
         status=status,
-        ends_at=user.subscription_ends_at.isoformat() if user.subscription_ends_at else None,
+        ends_at=(
+            user.subscription_ends_at.isoformat() if user.subscription_ends_at else None
+        ),
         features=get_plan_features(user.subscription_plan.value),
     )
+    return success_response("获取成功", subscription_data.model_dump())
 
 
 @router.post("/subscription/upgrade")
 async def upgrade_subscription(
     payload: UpgradeSubscriptionIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user)
+    user: User = Depends(require_console_user),
 ):
     """升级订阅计划"""
     if payload.plan not in ["pro", "enterprise"]:
-        raise HTTPException(status_code=400, detail="invalid_plan")
-    
+        return bad_request_response(
+            "无效的订阅计划", {"valid_plans": ["pro", "enterprise"]}
+        )
+
     # 计算订阅到期时间
     now = datetime.now()
     ends_at = now + timedelta(days=30 * payload.months)
-    
+
     # 更新用户订阅
     user.subscription_plan = SubscriptionPlan(payload.plan)
     user.subscription_ends_at = ends_at
     db.add(user)
     await db.flush()
-    
+
     # 赠送对应的月度积分
     plan_config = get_plan_config(payload.plan)
     acc = await get_or_create_account(db, user.id)
     acc.balance += plan_config.monthly_credits * payload.months
     db.add(acc)
     await db.flush()
-    
+
     # 记录积分流水
     tx = CreditTransaction(
         account_id=acc.id,
@@ -203,51 +267,64 @@ async def upgrade_subscription(
         note=f"订阅{plan_config.name}{payload.months}个月赠送积分",
     )
     db.add(tx)
-    
-    return {"ok": True, "ends_at": ends_at.isoformat()}
+
+    return success_response(
+        "订阅升级成功",
+        {
+            "plan": payload.plan,
+            "ends_at": ends_at.isoformat(),
+            "credits_added": plan_config.monthly_credits * payload.months,
+        },
+    )
 
 
-@router.get("/dashboard", response_model=DashboardOut)
+@router.get("/dashboard")
 async def get_dashboard(
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user)
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
 ):
     """获取Dashboard数据"""
     acc = await get_or_create_account(db, user.id)
     plan_config = get_plan_config(user.subscription_plan.value)
-    
+
     # 计算本月使用量（基于API请求日志）
     now = datetime.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    
-    monthly_usage = (await db.execute(
-        select(func.count(ApiRequestLog.id))
-        .where(
-            ApiRequestLog.user_id == user.id,
-            ApiRequestLog.created_at >= month_start,
-            ApiRequestLog.status_code == 200
+
+    monthly_usage = (
+        await db.execute(
+            select(func.count(ApiRequestLog.id)).where(
+                ApiRequestLog.user_id == user.id,
+                ApiRequestLog.created_at >= month_start,
+                ApiRequestLog.status_code == 200,
+            )
         )
-    )).scalar() or 0
-    
-    usage_percent = (monthly_usage / plan_config.monthly_quota * 100) if plan_config.monthly_quota > 0 else 0
-    
+    ).scalar() or 0
+
+    usage_percent = (
+        (monthly_usage / plan_config.monthly_quota * 100)
+        if plan_config.monthly_quota > 0
+        else 0
+    )
+
     # 下一个账单日期（下个月1号）
     if now.month == 12:
         next_billing_date = now.replace(year=now.year + 1, month=1, day=1)
     else:
         next_billing_date = now.replace(month=now.month + 1, day=1)
-    
+
     # 统计克隆音色数量
-    clone_count = (await db.execute(
-        select(func.count(Voice.id)).where(Voice.owner_user_id == user.id)
-    )).scalar() or 0
-    
+    clone_count = (
+        await db.execute(
+            select(func.count(Voice.id)).where(Voice.owner_user_id == user.id)
+        )
+    ).scalar() or 0
+
     # 判断计划状态
     plan_status = "active"
     if user.subscription_ends_at and user.subscription_ends_at < now:
         plan_status = "expired"
-    
-    return DashboardOut(
+
+    dashboard_data = DashboardOut(
         user_id=user.id,
         email=user.email,
         plan_name=plan_config.name,
@@ -262,42 +339,53 @@ async def get_dashboard(
         api_access_enabled=plan_config.api_access,
     )
 
+    return success_response("获取成功", dashboard_data.model_dump())
 
-@router.get("/api-keys", response_model=list[ApiKeyListItem])
+
+@router.get("/api-keys")
 async def list_api_keys(
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user)
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
 ):
     """获取所有API Keys（仅企业版）"""
     if user.subscription_plan != SubscriptionPlan.enterprise:
-        raise HTTPException(status_code=403, detail="api_access_requires_enterprise_plan")
-    
-    keys = (await db.execute(
-        select(ApiKey).where(ApiKey.user_id == user.id).order_by(desc(ApiKey.id))
-    )).scalars().all()
-    
-    return [
+        return forbidden_response("API访问需要企业版订阅")
+
+    keys = (
+        (
+            await db.execute(
+                select(ApiKey)
+                .where(ApiKey.user_id == user.id)
+                .order_by(desc(ApiKey.id))
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    api_keys_data = [
         ApiKeyListItem(
             id=k.id,
-            api_key=k.api_key,
+            name=k.name,
             api_key_masked=_mask_api_key(k.api_key),
             is_active=k.is_active,
             created_at=k.created_at.isoformat(),
-        )
+        ).model_dump()
         for k in keys
     ]
 
+    return success_response("获取成功", api_keys_data)
 
-@router.post("/api-keys", response_model=ApiKeyOut)
+
+@router.post("/api-keys")
 async def create_api_key(
     payload: CreateApiKeyIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user)
+    user: User = Depends(require_console_user),
 ):
     """创建新的API Key（仅企业版）"""
     if user.subscription_plan != SubscriptionPlan.enterprise:
-        raise HTTPException(status_code=403, detail="api_access_requires_enterprise_plan")
-    
+        return forbidden_response("API访问需要企业版订阅")
+
     secret = generate_api_secret()
     api = ApiKey(
         user_id=user.id,
@@ -308,37 +396,40 @@ async def create_api_key(
     )
     db.add(api)
     await db.flush()
-    return ApiKeyOut(api_key=api.api_key, api_secret=secret)
+
+    api_key_data = ApiKeyOut(api_key=api.api_key, api_secret=secret)
+    return created_response("API Key 创建成功", api_key_data.model_dump())
 
 
 @router.delete("/api-keys/{key_id}")
 async def delete_api_key(
     key_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user)
+    user: User = Depends(require_console_user),
 ):
     """删除API Key"""
-    key = (await db.execute(
-        select(ApiKey).where(ApiKey.id == key_id, ApiKey.user_id == user.id)
-    )).scalar_one_or_none()
-    
+    key = (
+        await db.execute(
+            select(ApiKey).where(ApiKey.id == key_id, ApiKey.user_id == user.id)
+        )
+    ).scalar_one_or_none()
+
     if not key:
-        raise HTTPException(status_code=404, detail="api_key_not_found")
-    
+        return not_found_response("API Key 不存在", {"key_id": key_id})
+
     await db.delete(key)
     await db.flush()
-    return {"ok": True}
+    return success_response("删除成功")
 
 
-@router.post("/api-keys/rotate", response_model=ApiKeyOut)
+@router.post("/api-keys/rotate")
 async def rotate_api_key(
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user)
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
 ):
     """轮换API Key（禁用旧的，创建新的，仅企业版）"""
     if user.subscription_plan != SubscriptionPlan.enterprise:
-        raise HTTPException(status_code=403, detail="api_access_requires_enterprise_plan")
-    
+        return forbidden_response("API访问需要企业版订阅")
+
     secret = generate_api_secret()
     api = ApiKey(
         user_id=user.id,
@@ -349,15 +440,20 @@ async def rotate_api_key(
     )
     db.add(api)
     await db.flush()
-    
+
     # 禁用所有旧的API Key
-    keys = (await db.execute(select(ApiKey).where(ApiKey.user_id == user.id))).scalars().all()
+    keys = (
+        (await db.execute(select(ApiKey).where(ApiKey.user_id == user.id)))
+        .scalars()
+        .all()
+    )
     for k in keys:
         if k.id != api.id:
             k.is_active = False
             db.add(k)
-    
-    return ApiKeyOut(api_key=api.api_key, api_secret=secret)
+
+    api_key_data = ApiKeyOut(api_key=api.api_key, api_secret=secret)
+    return created_response("API Key 轮换成功", api_key_data.model_dump())
 
 
 def _mask_api_key(api_key: str) -> str:
@@ -367,65 +463,91 @@ def _mask_api_key(api_key: str) -> str:
     return f"{api_key[:8]}...{api_key[-4:]}"
 
 
-@router.get("/usage-stats", response_model=list[UsageStatsOut])
+@router.get("/usage-stats")
 async def get_usage_stats(
     days: int = Query(default=7, ge=1, le=90),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user)
+    user: User = Depends(require_console_user),
 ):
     """获取使用统计数据（按天聚合）"""
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
-    
+
     results = []
     for i in range(days):
         day_start = start_date + timedelta(days=i)
         day_end = day_start + timedelta(days=1)
-        
-        total = (await db.execute(
-            select(func.count(ApiRequestLog.id))
-            .where(
-                ApiRequestLog.user_id == user.id,
-                ApiRequestLog.created_at >= day_start,
-                ApiRequestLog.created_at < day_end
+
+        total = (
+            await db.execute(
+                select(func.count(ApiRequestLog.id)).where(
+                    ApiRequestLog.user_id == user.id,
+                    ApiRequestLog.created_at >= day_start,
+                    ApiRequestLog.created_at < day_end,
+                )
             )
-        )).scalar() or 0
-        
-        successful = (await db.execute(
-            select(func.count(ApiRequestLog.id))
-            .where(
-                ApiRequestLog.user_id == user.id,
-                ApiRequestLog.created_at >= day_start,
-                ApiRequestLog.created_at < day_end,
-                ApiRequestLog.status_code == 200
+        ).scalar() or 0
+
+        successful = (
+            await db.execute(
+                select(func.count(ApiRequestLog.id)).where(
+                    ApiRequestLog.user_id == user.id,
+                    ApiRequestLog.created_at >= day_start,
+                    ApiRequestLog.created_at < day_end,
+                    ApiRequestLog.status_code == 200,
+                )
             )
-        )).scalar() or 0
-        
-        results.append(UsageStatsOut(
-            date=day_start.strftime("%Y-%m-%d"),
-            total_requests=total,
-            successful_requests=successful,
-            failed_requests=total - successful,
-        ))
-    
-    return results
+        ).scalar() or 0
+
+        results.append(
+            UsageStatsOut(
+                date=day_start.strftime("%Y-%m-%d"),
+                total_requests=total,
+                successful_requests=successful,
+                failed_requests=total - successful,
+            ).model_dump()
+        )
+
+    return success_response("获取成功", results)
 
 
-@router.get("/request-logs", response_model=list[RequestLogOut])
+@router.get("/request-logs")
 async def get_request_logs(
-    limit: int = Query(default=50, ge=1, le=200),
+    page: int = Query(default=1, ge=1, description="页码，从1开始"),
+    page_size: int = Query(default=50, ge=1, le=200, description="每页数量，最多200条"),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user)
+    user: User = Depends(require_console_user),
 ):
-    """获取最近的API请求日志"""
-    logs = (await db.execute(
-        select(ApiRequestLog)
-        .where(ApiRequestLog.user_id == user.id)
-        .order_by(desc(ApiRequestLog.created_at))
-        .limit(limit)
-    )).scalars().all()
-    
-    return [
+    """获取API请求日志（分页）"""
+    # 计算偏移量
+    offset = (page - 1) * page_size
+
+    # 查询总数
+    total_count = (
+        await db.execute(
+            select(func.count(ApiRequestLog.id)).where(ApiRequestLog.user_id == user.id)
+        )
+    ).scalar_one()
+
+    # 查询日志
+    logs = (
+        (
+            await db.execute(
+                select(ApiRequestLog)
+                .where(ApiRequestLog.user_id == user.id)
+                .order_by(desc(ApiRequestLog.created_at))
+                .limit(page_size)
+                .offset(offset)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    # 计算总页数
+    total_pages = (total_count + page_size - 1) // page_size  # 向上取整
+
+    items = [
         RequestLogOut(
             id=log.id,
             timestamp=log.created_at.isoformat(),
@@ -435,24 +557,52 @@ async def get_request_logs(
             latency_ms=log.latency_ms,
             response_size=log.response_size,
             error_message=log.error_message,
-        )
+        ).model_dump()
         for log in logs
     ]
 
+    pagination_data = PaginatedRequestLogs(
+        items=items,
+        total=total_count,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_prev=page > 1,
+    )
+    return success_response("获取成功", pagination_data.model_dump())
 
-@router.get("/credits", response_model=CreditAccountOut)
-async def credits(db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)):
+
+@router.get("/credits")
+async def credits(
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
+):
+    """获取积分余额"""
     acc = await get_or_create_account(db, user.id)
-    return CreditAccountOut(user_id=user.id, balance=acc.balance)
+    credit_data = CreditAccountOut(user_id=user.id, balance=acc.balance)
+    return success_response("获取成功", credit_data.model_dump())
 
 
-@router.get("/credits/transactions", response_model=list[CreditTxOut])
-async def credit_transactions(db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)):
+@router.get("/credits/transactions")
+async def credit_transactions(
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
+):
+    """获取积分交易记录"""
     acc = await get_or_create_account(db, user.id)
-    txs = (await db.execute(
-        select(CreditTransaction).where(CreditTransaction.account_id == acc.id).order_by(desc(CreditTransaction.id)).limit(200)
-    )).scalars().all()
-    return [
+    txs = (
+        (
+            await db.execute(
+                select(CreditTransaction)
+                .where(CreditTransaction.account_id == acc.id)
+                .order_by(desc(CreditTransaction.id))
+                .limit(200)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    transactions_data = [
         CreditTxOut(
             id=t.id,
             tx_type=t.tx_type.value,
@@ -461,12 +611,23 @@ async def credit_transactions(db: AsyncSession = Depends(get_db), user: User = D
             ref_id=t.ref_id,
             note=t.note,
             created_at=t.created_at.isoformat(),
-        )
+        ).model_dump()
         for t in txs
     ]
 
+    return success_response("获取成功", transactions_data)
+
 
 @router.post("/admin/credits/recharge")
-async def recharge_credits(payload: RechargeIn, db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
-    await recharge(db=db, user_id=payload.user_id, amount=payload.amount, note=payload.note)
-    return {"ok": True}
+async def recharge_credits(
+    payload: RechargeIn,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """管理员充值积分"""
+    await recharge(
+        db=db, user_id=payload.user_id, amount=payload.amount, note=payload.note
+    )
+    return success_response(
+        "充值成功", {"user_id": payload.user_id, "amount": payload.amount}
+    )

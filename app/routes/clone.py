@@ -7,8 +7,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.deps import OpenAPIPrincipal, get_db, require_console_user, require_openapi_principal
+from app.deps import (
+    OpenAPIPrincipal,
+    get_db,
+    require_console_user,
+    require_openapi_principal,
+)
 from app.models import CloneJob, JobStatus, User
+from app.responses import (
+    success_response,
+    not_found_response,
+)
 from app.schemas import CloneCreateOut, CloneJobOut
 from app.services.idempotency import get_idempotency, set_idempotency
 from app.services.kv import KV
@@ -29,7 +38,9 @@ def _clone_out(job: CloneJob) -> CloneJobOut:
     )
 
 
-async def _create_clone_job(db: AsyncSession, user_id: int, voice_name: str, is_public: bool) -> CloneJob:
+async def _create_clone_job(
+    db: AsyncSession, user_id: int, voice_name: str, is_public: bool
+) -> CloneJob:
     job = CloneJob(
         user_id=user_id,
         voice_name=voice_name,
@@ -42,7 +53,7 @@ async def _create_clone_job(db: AsyncSession, user_id: int, voice_name: str, is_
     return job
 
 
-@console_router.post("/clone/jobs", response_model=CloneCreateOut)
+@console_router.post("/clone/jobs")
 async def console_create_clone(
     voice_name: str,
     is_public: bool = False,
@@ -50,6 +61,7 @@ async def console_create_clone(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
+    """创建克隆任务"""
     job = await _create_clone_job(db, user.id, voice_name, is_public)
     ds_dir = job_dir("clone_dataset", user_id=user.id, job_id=job.id)
     for f in files:
@@ -64,18 +76,38 @@ async def console_create_clone(
         celery_app.send_task("app.tasks.jobs.run_clone_job", args=[job.id])
     else:
         run_clone_job(job.id)
-    return CloneCreateOut(id=job.id, status=job.status.value, error=job.error or "", voice_name=job.voice_name)
+
+    clone_data = CloneCreateOut(
+        id=job.id,
+        status=job.status.value,
+        error=job.error or "",
+        voice_name=job.voice_name,
+    )
+    return success_response("克隆任务创建成功", clone_data.model_dump())
 
 
-@console_router.get("/clone/jobs/{job_id}", response_model=CloneJobOut)
-async def console_get_clone(job_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)):
-    job = (await db.execute(select(CloneJob).where(CloneJob.id == job_id, CloneJob.user_id == user.id))).scalar_one_or_none()
+@console_router.get("/clone/jobs/{job_id}")
+async def console_get_clone(
+    job_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console_user),
+):
+    """获取克隆任务详情"""
+    job = (
+        await db.execute(
+            select(CloneJob).where(CloneJob.id == job_id, CloneJob.user_id == user.id)
+        )
+    ).scalar_one_or_none()
     if not job:
-        raise HTTPException(status_code=404, detail="job_not_found")
-    return _clone_out(job)
+        raise HTTPException(
+            status_code=404, detail=not_found_response("任务不存在", {"job_id": job_id})
+        )
+
+    clone_data = _clone_out(job)
+    return success_response("获取成功", clone_data.model_dump())
 
 
-@openapi_router.post("/clone/jobs", response_model=CloneCreateOut)
+@openapi_router.post("/clone/jobs")
 async def openapi_create_clone(
     voice_name: str,
     is_public: bool = False,
@@ -84,10 +116,17 @@ async def openapi_create_clone(
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
 ):
+    """通过 OpenAPI 创建克隆任务"""
     kv = KV.from_settings()
-    existed = get_idempotency(kv, principal.user.id, "openapi:clone:create", idempotency_key)
+    existed = get_idempotency(
+        kv, principal.user.id, "openapi:clone:create", idempotency_key
+    )
     if existed:
-        return CloneCreateOut(id=int(existed), status="queued", voice_name=voice_name)
+        clone_data = CloneCreateOut(
+            id=int(existed), status="queued", voice_name=voice_name
+        )
+        return success_response("克隆任务已存在（幂等）", clone_data.model_dump())
+
     job = await _create_clone_job(db, principal.user.id, voice_name, is_public)
     ds_dir = job_dir("clone_dataset", user_id=principal.user.id, job_id=job.id)
     for f in files:
@@ -95,19 +134,45 @@ async def openapi_create_clone(
         save_bytes(os.path.join(ds_dir, f.filename or "audio.bin"), content)
     job.dataset_dir = ds_dir
     db.add(job)
-    set_idempotency(kv, principal.user.id, "openapi:clone:create", idempotency_key, str(job.id), ttl_seconds=3600)
+    set_idempotency(
+        kv,
+        principal.user.id,
+        "openapi:clone:create",
+        idempotency_key,
+        str(job.id),
+        ttl_seconds=3600,
+    )
     from app.tasks.celery_app import celery_app
 
     celery_app.send_task("app.tasks.jobs.run_clone_job", args=[job.id])
-    return CloneCreateOut(id=job.id, status=job.status.value, error=job.error or "", voice_name=job.voice_name)
+
+    clone_data = CloneCreateOut(
+        id=job.id,
+        status=job.status.value,
+        error=job.error or "",
+        voice_name=job.voice_name,
+    )
+    return success_response("克隆任务创建成功", clone_data.model_dump())
 
 
-@openapi_router.get("/clone/jobs/{job_id}", response_model=CloneJobOut)
-async def openapi_get_clone(job_id: int, db: AsyncSession = Depends(get_db), principal: OpenAPIPrincipal = Depends(require_openapi_principal)):
-    job = (await db.execute(select(CloneJob).where(CloneJob.id == job_id, CloneJob.user_id == principal.user.id))).scalar_one_or_none()
+@openapi_router.get("/clone/jobs/{job_id}")
+async def openapi_get_clone(
+    job_id: int,
+    db: AsyncSession = Depends(get_db),
+    principal: OpenAPIPrincipal = Depends(require_openapi_principal),
+):
+    """通过 OpenAPI 获取克隆任务详情"""
+    job = (
+        await db.execute(
+            select(CloneJob).where(
+                CloneJob.id == job_id, CloneJob.user_id == principal.user.id
+            )
+        )
+    ).scalar_one_or_none()
     if not job:
-        raise HTTPException(status_code=404, detail="job_not_found")
-    return _clone_out(job)
+        raise HTTPException(
+            status_code=404, detail=not_found_response("任务不存在", {"job_id": job_id})
+        )
 
-
-
+    clone_data = _clone_out(job)
+    return success_response("获取成功", clone_data.model_dump())

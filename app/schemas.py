@@ -44,6 +44,7 @@ class ChangePasswordIn(BaseModel):
 
 class SubscriptionInfo(BaseModel):
     """订阅计划信息"""
+
     plan: str  # free, pro, enterprise
     plan_name: str  # 免费版、专业版、企业版
     status: str  # active, expired, cancelled
@@ -58,8 +59,9 @@ class ApiKeyOut(BaseModel):
 
 class ApiKeyListItem(BaseModel):
     """API Key列表项（不包含secret）"""
+
     id: int
-    api_key: str
+    name: str
     api_key_masked: str  # 脱敏显示，如 sk_live_...844f
     is_active: bool
     created_at: str
@@ -67,11 +69,13 @@ class ApiKeyListItem(BaseModel):
 
 class CreateApiKeyIn(BaseModel):
     """创建API Key的请求（仅企业版可用）"""
+
     name: str = Field(default="", max_length=100, description="密钥名称（可选）")
 
 
 class DashboardOut(BaseModel):
     """Dashboard概览数据"""
+
     user_id: int
     email: str
     plan_name: str
@@ -88,6 +92,7 @@ class DashboardOut(BaseModel):
 
 class UsageStatsOut(BaseModel):
     """使用统计数据"""
+
     date: str
     total_requests: int
     successful_requests: int
@@ -96,6 +101,7 @@ class UsageStatsOut(BaseModel):
 
 class RequestLogOut(BaseModel):
     """API请求日志"""
+
     id: int
     timestamp: str
     endpoint: str
@@ -104,6 +110,18 @@ class RequestLogOut(BaseModel):
     latency_ms: int
     response_size: int
     error_message: str
+
+
+class PaginatedRequestLogs(BaseModel):
+    """分页的API请求日志"""
+
+    items: list[RequestLogOut]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool
 
 
 class CreditAccountOut(BaseModel):
@@ -129,7 +147,10 @@ class RechargeIn(BaseModel):
 
 class UpgradeSubscriptionIn(BaseModel):
     """升级订阅"""
-    plan: str = Field(..., pattern="^(pro|enterprise)$", description="目标计划：pro或enterprise")
+
+    plan: str = Field(
+        ..., pattern="^(pro|enterprise)$", description="目标计划：pro或enterprise"
+    )
     months: int = Field(default=1, ge=1, le=12, description="订阅月数")
 
 

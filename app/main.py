@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+from loguru import logger
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -7,6 +9,10 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.db import Base, engine, AsyncSessionLocal
 from app.models import *  # noqa: F401,F403 (ensure models imported for metadata)
+from app.responses import (
+    server_error_response,
+    bad_request_response,
+)
 from app.routes.api_docs import router as api_docs_router
 from app.routes.clone import console_router as clone_console_router
 from app.routes.clone import openapi_router as clone_openapi_router
@@ -39,27 +45,44 @@ async def capture_raw_body(request: Request, call_next):
 
 
 @app.exception_handler(ValueError)
-async def value_error_handler(_: Request, exc: ValueError):
-    return JSONResponse(status_code=400, content={"detail": str(exc)})
+async def value_error_handler(request: Request, exc: ValueError):
+    """处理 ValueError 并返回统一格式"""
+    return JSONResponse(status_code=400, content=bad_request_response(str(exc)))
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """处理所有未捕获的异常"""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+
+    # 生产环境不暴露详细错误（通过环境变量判断）
+    is_dev = os.getenv("ENV", "production").lower() in ("development", "dev", "local")
+
+    if is_dev:
+        content = server_error_response("服务器内部错误", {"detail": str(exc)})
+    else:
+        content = server_error_response("服务器内部错误")
+
+    return JSONResponse(status_code=500, content=content)
 
 
 async def init_db() -> None:
     """初始化数据库：清空旧表 -> 创建新表 -> 创建管理员"""
     if not settings.auto_create_db:
         return
-    
+
     # 🗑️ 每次启动都清空所有表（开发环境）
     print("⚠️  清空所有表...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     print("✅ 所有表已清空")
-    
+
     # 🏗️ 重新创建所有表
     print("📦 重新创建表结构...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     print("✅ 表结构创建完成")
-    
+
     # 👤 创建管理员账号
     async with AsyncSessionLocal() as db:
         await bootstrap_admin(db)
@@ -85,5 +108,3 @@ app.include_router(tts_openapi_router)
 app.include_router(clone_console_router)
 app.include_router(clone_openapi_router)
 app.include_router(openapi_docs_router)
-
-
