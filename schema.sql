@@ -112,6 +112,7 @@ CREATE TABLE tts_jobs (
     temperature DOUBLE PRECISION NOT NULL DEFAULT 1.0,
     top_k INTEGER NOT NULL DEFAULT 5,
     top_p DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    webhook_url VARCHAR(512) NOT NULL DEFAULT '',
     status job_status NOT NULL DEFAULT 'queued',
     error VARCHAR(255) NOT NULL DEFAULT '',
     output_audio_path VARCHAR(255) NOT NULL DEFAULT '',
@@ -216,6 +217,7 @@ COMMENT ON COLUMN tts_jobs.voice_id IS '使用的音色';
 COMMENT ON COLUMN tts_jobs.text IS '输入文本';
 COMMENT ON COLUMN tts_jobs.text_utf8_bytes IS '输入文本 UTF-8 字节数（计费依据）';
 COMMENT ON COLUMN tts_jobs.cost_credits IS '扣费积分（= bytes * price）';
+COMMENT ON COLUMN tts_jobs.webhook_url IS 'Webhook 回调地址（任务完成时调用，可选）';
 COMMENT ON COLUMN tts_jobs.status IS '状态：queued(已入队), running(处理中), succeeded(成功), failed(失败)';
 COMMENT ON COLUMN tts_jobs.error IS '错误码（失败时）';
 COMMENT ON COLUMN tts_jobs.output_audio_path IS '产出音频本地路径';

@@ -229,9 +229,8 @@ class TTSJob(Base):
     temperature: Mapped[float] = mapped_column(Float, default=1.0)  # 采样温度
     top_k: Mapped[int] = mapped_column(Integer, default=5)  # 采样 top_k
     top_p: Mapped[float] = mapped_column(Float, default=1.0)  # 采样 top_p
-    status: Mapped[JobStatus] = mapped_column(
-        Enum(JobStatus, name="job_status"), default=JobStatus.queued, index=True
-    )
+    webhook_url: Mapped[str] = mapped_column(String(512), default="")  # Webhook 回调地址（任务完成时调用）
+    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.queued, index=True)
     error: Mapped[str] = mapped_column(String(255), default="")  # 错误码（失败时）
     output_audio_path: Mapped[str] = mapped_column(
         String(255), default=""

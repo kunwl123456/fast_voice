@@ -34,6 +34,27 @@ from app.routes.voices import openapi_router as voices_openapi_router
 app = FastAPI(title="fast_voice", version="0.1.0")
 
 
+@app.middleware("http")
+async def capture_raw_body(request: Request, call_next):
+    """
+    OpenAPI 签名需要"原始 body bytes"的 sha256，因此这里缓存 raw body 到 request.state。
+    
+    注意：对于 SSE 端点（/events），跳过此中间件，因为重写 receive() 会干扰长连接
+    """
+    # 跳过 SSE 端点
+    if request.url.path.endswith("/events"):
+        return await call_next(request)
+    
+    body = await request.body()
+    request.state.raw_body = body
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request._receive = receive  # type: ignore[attr-defined]
+    return await call_next(request)
+
+
 @app.exception_handler(ValueError)
 async def value_error_handler(_: Request, exc: ValueError):
     """处理 ValueError 并返回统一格式"""
@@ -55,11 +76,20 @@ async def permission_error_handler(_: Request, exc: PermissionException):
 @app.exception_handler(Exception)
 async def general_exception_handler(_: Request, exc: Exception):
     """处理所有未捕获的异常"""
+    # 对于 StreamingResponse 相关的 ASGI 协议错误，不做处理，让连接自然关闭
+    if isinstance(exc, (RuntimeError, ExceptionGroup)):
+        exc_str = str(exc)
+        if "Unexpected message" in exc_str or "StreamingResponse" in exc_str:
+            logger.debug(f"StreamingResponse connection closed: {exc}")
+            # 这是正常的流关闭，不做任何处理
+            raise exc
+    
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
 
     # 生产环境不暴露详细错误（通过环境变量判断）
     is_dev = os.getenv("ENV", "production").lower() in ("development", "dev", "local")
 
+    # server_error_response 已经返回 JSONResponse，直接返回即可
     if is_dev:
         return server_error_response("服务器内部错误", {"detail": str(exc)})
     else:

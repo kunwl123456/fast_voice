@@ -185,6 +185,9 @@ class TTSCreatIn(BaseModel):
     )
     top_k: int | None = Field(default=None, description="采样 top_k，可选；默认 5")
     top_p: float | None = Field(default=None, description="采样 top_p，可选；默认 1.0")
+    webhook_url: str | None = Field(
+        default=None, max_length=512, description="Webhook 回调地址，任务完成时调用；可选"
+    )
 
 
 class JobOut(BaseModel):

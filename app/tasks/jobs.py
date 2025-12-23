@@ -32,6 +32,28 @@ def _write_dummy_wav(path: str, seconds: float = 1.0, framerate: int = 22050) ->
         wf.writeframes(b"\x00\x00" * nframes)
 
 
+def _call_webhook(webhook_url: str, payload: dict) -> None:
+    """调用 webhook 回调地址"""
+    if not webhook_url:
+        return
+    try:
+        resp = requests.post(
+            webhook_url,
+            json=payload,
+            timeout=10,
+            headers={"Content-Type": "application/json", "User-Agent": "FastVoice-Webhook/1.0"}
+        )
+        if resp.status_code >= 400:
+            logger.warning(
+                "webhook call returned error: url=%s status=%s body=%s",
+                webhook_url, resp.status_code, resp.text[:200]
+            )
+        else:
+            logger.info("webhook called successfully: url=%s status=%s", webhook_url, resp.status_code)
+    except Exception as e:
+        logger.warning("webhook call failed: url=%s error=%s", webhook_url, e)
+
+
 @celery_app.task(name="app.tasks.jobs.run_tts_job")
 def run_tts_job(job_id: int) -> None:
     # 在 Session 内读取必要信息
@@ -51,6 +73,7 @@ def run_tts_job(job_id: int) -> None:
         temperature = job.temperature or 1.0
         top_k = job.top_k or 5
         top_p = job.top_p or 1.0
+        webhook_url = job.webhook_url or ""
 
     try:
         out_dir = job_dir("tts", user_id=user_id, job_uuid=job_uuid)
@@ -109,6 +132,18 @@ def run_tts_job(job_id: int) -> None:
             job.output_audio_path = out_path
             job.updated_at = format_timezone()
             db.commit()
+        
+        # 调用 webhook 回调（成功）
+        if webhook_url:
+            from app.services.storage import to_public_file_url
+            _call_webhook(webhook_url, {
+                "job_id": job_uuid,
+                "status": "succeeded",
+                "output_audio_url": to_public_file_url(out_path),
+                "cost_credits": job.cost_credits,
+                "timestamp": format_timezone().isoformat()
+            })
+        
         if used_fallback:
             logger.info("tts job %s used fallback audio", job_id)
     except Exception as e:
@@ -120,9 +155,21 @@ def run_tts_job(job_id: int) -> None:
             job.status = JobStatus.failed
             job.error = "tts_failed"
             job.updated_at = format_timezone()
+            webhook_url_failed = job.webhook_url or ""
+            job_uuid_failed = job.uuid
             # refund 需要从数据库读取最新的 cost_credits
             refund(db=db, user_id=job.user_id, amount=job.cost_credits, ref_type="tts", ref_id=str(job.id))
             db.commit()
+        
+        # 调用 webhook 回调（失败）
+        if webhook_url_failed:
+            _call_webhook(webhook_url_failed, {
+                "job_id": job_uuid_failed,
+                "status": "failed",
+                "error": "tts_failed",
+                "error_message": str(e),
+                "timestamp": format_timezone().isoformat()
+            })
 
 
 @celery_app.task(name="app.tasks.jobs.run_clone_job")

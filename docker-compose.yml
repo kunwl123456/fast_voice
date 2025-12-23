@@ -36,7 +36,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["uv", "run", "celery", "-A", "app.tasks.celery_app:celery_app", "worker", "-l", "INFO", "-Q", "tts,clone"]
+    command: ["uv", "run", "celery", "-A", "app.tasks.celery_app:celery_app", "worker", "-l", "DEBUG", "-Q", "tts,clone"]
     environment:
       <<: *common-environment
       AUTO_CREATE_DB: false
