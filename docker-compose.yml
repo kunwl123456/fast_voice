@@ -11,10 +11,10 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       JWT_SECRET: change-me
       API_SECRET_ENC_KEY: change-me-32-bytes-base64-fernet-key
-      AUTO_CREATE_DB: "1"
-      ADMIN_BOOTSTRAP: "1"
-      ADMIN_EMAIL: admin@example.com
-      ADMIN_PASSWORD: admin12345
+      AUTO_CREATE_DB: true
+      ADMIN_BOOTSTRAP: true
+      ADMIN_EMAIL: admin@autogame.ai
+      ADMIN_PASSWORD: 123456
       CREDIT_PRICE_PER_UTF8_BYTE: "1"
       SIGNATURE_TIME_WINDOW_SECONDS: "300"
       MAX_TEXT_UTF8_BYTES: "4000"
@@ -43,10 +43,10 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       JWT_SECRET: change-me
       API_SECRET_ENC_KEY: change-me-32-bytes-base64-fernet-key
-      AUTO_CREATE_DB: "1"
-      ADMIN_BOOTSTRAP: "1"
-      ADMIN_EMAIL: admin@example.com
-      ADMIN_PASSWORD: admin12345
+      AUTO_CREATE_DB: false
+      ADMIN_BOOTSTRAP: false
+      ADMIN_EMAIL: admin@autogame.ai
+      ADMIN_PASSWORD: 123456
       CREDIT_PRICE_PER_UTF8_BYTE: "1"
       SIGNATURE_TIME_WINDOW_SECONDS: "300"
       MAX_TEXT_UTF8_BYTES: "4000"

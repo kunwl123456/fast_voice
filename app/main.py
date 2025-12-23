@@ -44,10 +44,23 @@ async def value_error_handler(_: Request, exc: ValueError):
 
 
 async def init_db() -> None:
+    """初始化数据库：清空旧表 -> 创建新表 -> 创建管理员"""
     if not settings.auto_create_db:
         return
+    
+    # 🗑️ 每次启动都清空所有表（开发环境）
+    print("⚠️  清空所有表...")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    print("✅ 所有表已清空")
+    
+    # 🏗️ 重新创建所有表
+    print("📦 重新创建表结构...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    print("✅ 表结构创建完成")
+    
+    # 👤 创建管理员账号
     async with AsyncSessionLocal() as db:
         await bootstrap_admin(db)
 
