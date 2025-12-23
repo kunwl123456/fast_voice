@@ -30,12 +30,21 @@ class TxType(str, enum.Enum):
     recharge = "recharge"  # 充值
     consume = "consume"  # 消费（创建任务时预扣）
     refund = "refund"  # 退款（任务失败自动回滚）
+    subscription = "subscription"  # 订阅赠送
+
+
+class SubscriptionPlan(str, enum.Enum):
+    """订阅计划类型。"""
+
+    free = "free"  # 免费版：每月少量积分
+    pro = "pro"  # 专业版：每月一定量积分、商业使用权
+    enterprise = "enterprise"  # 企业版：无限克隆位、大量积分、API访问
 
 
 class User(Base):
     """
     表：users
-    用途：Console 用户账号（登录/改名/改密码），并拥有一个或多个 Project。
+    用途：用户账号（登录/改名/改密码），直接拥有API Key、积分账户等资源。
     """
 
     __tablename__ = "users"
@@ -44,63 +53,58 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)  # 登录邮箱
     password_hash: Mapped[str] = mapped_column(String(255))  # bcrypt hash
     display_name: Mapped[str] = mapped_column(String(100), default="")  # 展示名
+    avatar_url: Mapped[str] = mapped_column(String(512), default="")  # 头像链接
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)  # 管理员：可调账
+    subscription_plan: Mapped[SubscriptionPlan] = mapped_column(
+        Enum(SubscriptionPlan, name="subscription_plan"), default=SubscriptionPlan.free, index=True
+    )  # 订阅计划
+    subscription_ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )  # 订阅到期时间（免费版为空）
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)  # 创建时间
 
-    projects: Mapped[list["Project"]] = relationship(back_populates="owner")  # 拥有的项目
-
-
-class Project(Base):
-    """
-    表：projects
-    用途：OpenAPI 的调用主体（B 端按 project 计费/限流/额度）。
-    V1：默认每个用户一个 default project。
-    """
-
-    __tablename__ = "projects"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)  # 所属用户
-    name: Mapped[str] = mapped_column(String(120), default="default")  # 项目名
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
-
-    owner: Mapped["User"] = relationship(back_populates="projects")
-    api_keys: Mapped[list["ApiKey"]] = relationship(back_populates="project")
-    credit_account: Mapped["CreditAccount"] = relationship(back_populates="project", uselist=False)
+    # 关联关系
+    api_keys: Mapped[list["ApiKey"]] = relationship(back_populates="user")
+    credit_account: Mapped["CreditAccount"] = relationship(back_populates="user", uselist=False)
+    voices: Mapped[list["Voice"]] = relationship(back_populates="owner")
+    tts_jobs: Mapped[list["TTSJob"]] = relationship(back_populates="user")
+    clone_jobs: Mapped[list["CloneJob"]] = relationship(back_populates="user")
 
 
 class ApiKey(Base):
     """
     表：api_keys
     用途：OpenAPI 鉴权凭证（api_key 公开，api_secret 仅用于签名，服务端加密存储）。
+    直接关联到用户，企业版用户才能创建API Key。
     """
 
     __tablename__ = "api_keys"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)  # 所属用户
     api_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)  # 公开 key（请求头 X-API-Key）
     api_secret_ciphertext: Mapped[str] = mapped_column(Text)  # Fernet 加密后的 secret
+    name: Mapped[str] = mapped_column(String(100), default="")  # 密钥名称（用于展示）
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)  # 是否启用
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
 
-    project: Mapped["Project"] = relationship(back_populates="api_keys")
+    user: Mapped["User"] = relationship(back_populates="api_keys")
 
 
 class CreditAccount(Base):
     """
     表：credit_accounts
-    用途：项目积分账户（余额）。
+    用途：用户积分账户（余额）。
     """
 
     __tablename__ = "credit_accounts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), unique=True, index=True)  # 1 project : 1 account
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True, index=True)  # 1 user : 1 account
     balance: Mapped[int] = mapped_column(Integer, default=0)  # 当前余额（积分）
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)  # 最近更新时间
 
-    project: Mapped["Project"] = relationship(back_populates="credit_account")
+    user: Mapped["User"] = relationship(back_populates="credit_account")
     transactions: Mapped[list["CreditTransaction"]] = relationship(back_populates="account")
 
 
@@ -114,7 +118,7 @@ class CreditTransaction(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("credit_accounts.id"), index=True)  # 归属账户
-    tx_type: Mapped[TxType] = mapped_column(Enum(TxType), index=True)  # 类型
+    tx_type: Mapped[TxType] = mapped_column(Enum(TxType, name="tx_type"), index=True)  # 类型
     amount: Mapped[int] = mapped_column(Integer)  # + 入账 / - 扣费
     ref_type: Mapped[str] = mapped_column(String(50), default="")  # 关联对象类型（tts/clone/admin）
     ref_id: Mapped[str] = mapped_column(String(100), default="")  # 关联对象 id（job id）
@@ -127,19 +131,21 @@ class CreditTransaction(Base):
 class Voice(Base):
     """
     表：voices
-    用途：音色实体（克隆结果）。公开音色即进入“声音大厅”。
+    用途：音色实体（克隆结果）。公开音色即进入"声音大厅"。
     """
 
     __tablename__ = "voices"
-    __table_args__ = (UniqueConstraint("owner_project_id", "name", name="uq_voice_owner_name"),)
+    __table_args__ = (UniqueConstraint("owner_user_id", "name", name="uq_voice_owner_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    owner_project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)  # 拥有者（project）
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)  # 拥有者（用户）
     name: Mapped[str] = mapped_column(String(120))  # 音色名称
     description: Mapped[str] = mapped_column(String(255), default="")  # 描述
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, index=True)  # 是否公开
     preview_audio_path: Mapped[str] = mapped_column(String(255), default="")  # 本地预览音频路径
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
+
+    owner: Mapped["User"] = relationship(back_populates="voices")
 
 
 class TTSJob(Base):
@@ -151,16 +157,18 @@ class TTSJob(Base):
     __tablename__ = "tts_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)  # 调用方（project）
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)  # 调用方（用户）
     voice_id: Mapped[int] = mapped_column(ForeignKey("voices.id"), index=True)  # 使用的音色
     text: Mapped[str] = mapped_column(Text)  # 输入文本
     text_utf8_bytes: Mapped[int] = mapped_column(Integer)  # 输入文本 UTF-8 字节数（计费依据）
     cost_credits: Mapped[int] = mapped_column(Integer)  # 扣费积分（= bytes * price）
-    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.queued, index=True)
+    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.queued, index=True)
     error: Mapped[str] = mapped_column(String(255), default="")  # 错误码（失败时）
     output_audio_path: Mapped[str] = mapped_column(String(255), default="")  # 产出音频本地路径
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
+
+    user: Mapped["User"] = relationship(back_populates="tts_jobs")
 
 
 class CloneJob(Base):
@@ -172,14 +180,36 @@ class CloneJob(Base):
     __tablename__ = "clone_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)  # 调用方（project）
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)  # 调用方（用户）
     voice_name: Mapped[str] = mapped_column(String(120))  # 目标音色名
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)  # 产出音色是否公开
-    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.queued, index=True)
+    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.queued, index=True)
     error: Mapped[str] = mapped_column(String(255), default="")
     dataset_dir: Mapped[str] = mapped_column(String(255), default="")  # 本地数据集目录（上传文件落这里）
     result_voice_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 成功后关联 voices.id
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
+
+    user: Mapped["User"] = relationship(back_populates="clone_jobs")
+
+
+class ApiRequestLog(Base):
+    """
+    表：api_request_logs
+    用途：记录API请求日志，用于Dashboard展示和分析。
+    """
+
+    __tablename__ = "api_request_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)  # 调用用户
+    api_key_id: Mapped[int] = mapped_column(ForeignKey("api_keys.id"), index=True)  # 使用的API Key
+    endpoint: Mapped[str] = mapped_column(String(255))  # 请求端点，如 /v1/completions
+    method: Mapped[str] = mapped_column(String(10))  # HTTP方法：GET/POST/PUT/DELETE
+    status_code: Mapped[int] = mapped_column(Integer, index=True)  # HTTP状态码
+    latency_ms: Mapped[int] = mapped_column(Integer)  # 请求延迟（毫秒）
+    response_size: Mapped[int] = mapped_column(Integer, default=0)  # 响应大小（字节）
+    error_message: Mapped[str] = mapped_column(String(255), default="")  # 错误信息
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone, index=True)
 
 

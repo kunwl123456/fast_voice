@@ -15,11 +15,11 @@ def calc_cost(text: str) -> int:
     return utf8_bytes(text) * int(settings.credit_price_per_utf8_byte)
 
 
-async def get_or_create_account(db: AsyncSession, project_id: int) -> CreditAccount:
-    acc = (await db.execute(select(CreditAccount).where(CreditAccount.project_id == project_id))).scalar_one_or_none()
+async def get_or_create_account(db: AsyncSession, user_id: int) -> CreditAccount:
+    acc = (await db.execute(select(CreditAccount).where(CreditAccount.user_id == user_id))).scalar_one_or_none()
     if acc:
         return acc
-    acc = CreditAccount(project_id=project_id, balance=0)
+    acc = CreditAccount(user_id=user_id, balance=0)
     db.add(acc)
     await db.flush()
     return acc
@@ -28,7 +28,7 @@ async def get_or_create_account(db: AsyncSession, project_id: int) -> CreditAcco
 async def ensure_sufficient_and_consume(
     *,
     db: AsyncSession,
-    project_id: int,
+    user_id: int,
     amount: int,
     ref_type: str,
     ref_id: str,
@@ -39,7 +39,7 @@ async def ensure_sufficient_and_consume(
     - 余额不足 -> 抛出 ValueError("insufficient_credits")
     - 成功 -> 写一条 consume(-amount) 流水
     """
-    acc = await get_or_create_account(db, project_id)
+    acc = await get_or_create_account(db, user_id)
     if acc.balance < amount:
         raise ValueError("insufficient_credits")
     acc.balance -= amount
@@ -58,7 +58,7 @@ async def ensure_sufficient_and_consume(
 async def refund(
     *,
     db: AsyncSession,
-    project_id: int,
+    user_id: int,
     amount: int,
     ref_type: str,
     ref_id: str,
@@ -67,7 +67,7 @@ async def refund(
     """任务失败退款（V1：全额退款）。"""
     if amount <= 0:
         return
-    acc = await get_or_create_account(db, project_id)
+    acc = await get_or_create_account(db, user_id)
     acc.balance += amount
     db.add(
         CreditTransaction(
@@ -84,13 +84,13 @@ async def refund(
 async def recharge(
     *,
     db: AsyncSession,
-    project_id: int,
+    user_id: int,
     amount: int,
     note: str,
     ref_id: str = "",
 ) -> None:
     """充值。"""
-    acc = await get_or_create_account(db, project_id)
+    acc = await get_or_create_account(db, user_id)
     acc.balance += amount
     db.add(
         CreditTransaction(

@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.deps import OpenAPIPrincipal, get_db, require_console_user, require_openapi_principal
-from app.models import JobStatus, TTSJob
-from app.routes.shared import ensure_project_owns_voice, get_default_project
+from app.models import JobStatus, TTSJob, User
+from app.routes.shared import ensure_user_owns_voice
 from app.schemas import JobOut, TTSJobOut, TTSCreatIn
 from app.services.billing import calc_cost, ensure_sufficient_and_consume, utf8_bytes
 from app.services.idempotency import get_idempotency, set_idempotency
@@ -31,14 +31,14 @@ def _tts_out(job: TTSJob) -> TTSJobOut:
     )
 
 
-async def _create_job(db: AsyncSession, project_id: int, payload: TTSCreatIn) -> TTSJob:
+async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TTSJob:
     b = utf8_bytes(payload.text)
     if b > settings.max_text_utf8_bytes:
         raise HTTPException(status_code=400, detail="text_too_long")
-    await ensure_project_owns_voice(db, project_id, payload.voice_id)
+    await ensure_user_owns_voice(db, user_id, payload.voice_id)
     cost = calc_cost(payload.text)
     job = TTSJob(
-        project_id=project_id,
+        user_id=user_id,
         voice_id=payload.voice_id,
         text=payload.text,
         text_utf8_bytes=b,
@@ -49,16 +49,15 @@ async def _create_job(db: AsyncSession, project_id: int, payload: TTSCreatIn) ->
     await db.flush()
     # 预扣费（失败会在 worker 里退款）
     try:
-        await ensure_sufficient_and_consume(db=db, project_id=project_id, amount=cost, ref_type="tts", ref_id=str(job.id))
+        await ensure_sufficient_and_consume(db=db, user_id=user_id, amount=cost, ref_type="tts", ref_id=str(job.id))
     except ValueError as e:
         raise HTTPException(status_code=402, detail=str(e))
     return job
 
 
 @console_router.post("/tts/jobs", response_model=JobOut)
-async def console_create_tts(payload: TTSCreatIn, db: AsyncSession = Depends(get_db), user=Depends(require_console_user)):
-    proj = await get_default_project(db, user)
-    job = await _create_job(db, proj.id, payload)
+async def console_create_tts(payload: TTSCreatIn, db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)):
+    job = await _create_job(db, user.id, payload)
     # 异步：如果没有 celery broker，开发时允许直接同步跑（方便联调）
     if settings.celery_broker_url:
         from app.tasks.celery_app import celery_app
@@ -70,9 +69,8 @@ async def console_create_tts(payload: TTSCreatIn, db: AsyncSession = Depends(get
 
 
 @console_router.get("/tts/jobs/{job_id}", response_model=TTSJobOut)
-async def console_get_tts(job_id: int, db: AsyncSession = Depends(get_db), user=Depends(require_console_user)):
-    proj = await get_default_project(db, user)
-    job = (await db.execute(select(TTSJob).where(TTSJob.id == job_id, TTSJob.project_id == proj.id))).scalar_one_or_none()
+async def console_get_tts(job_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)):
+    job = (await db.execute(select(TTSJob).where(TTSJob.id == job_id, TTSJob.user_id == user.id))).scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="job_not_found")
     return _tts_out(job)
@@ -87,11 +85,11 @@ async def openapi_create_tts(
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
 ):
     kv = KV.from_settings()
-    existed = get_idempotency(kv, principal.project.id, "openapi:tts:create", idempotency_key)
+    existed = get_idempotency(kv, principal.user.id, "openapi:tts:create", idempotency_key)
     if existed:
         return JobOut(id=int(existed), status="queued")
-    job = await _create_job(db, principal.project.id, payload)
-    set_idempotency(kv, principal.project.id, "openapi:tts:create", idempotency_key, str(job.id), ttl_seconds=3600)
+    job = await _create_job(db, principal.user.id, payload)
+    set_idempotency(kv, principal.user.id, "openapi:tts:create", idempotency_key, str(job.id), ttl_seconds=3600)
     from app.tasks.celery_app import celery_app
 
     celery_app.send_task("app.tasks.jobs.run_tts_job", args=[job.id])
@@ -100,9 +98,10 @@ async def openapi_create_tts(
 
 @openapi_router.get("/tts/jobs/{job_id}", response_model=TTSJobOut)
 async def openapi_get_tts(job_id: int, db: AsyncSession = Depends(get_db), principal: OpenAPIPrincipal = Depends(require_openapi_principal)):
-    job = (await db.execute(select(TTSJob).where(TTSJob.id == job_id, TTSJob.project_id == principal.project.id))).scalar_one_or_none()
+    job = (await db.execute(select(TTSJob).where(TTSJob.id == job_id, TTSJob.user_id == principal.user.id))).scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="job_not_found")
     return _tts_out(job)
+
 
 

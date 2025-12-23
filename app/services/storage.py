@@ -14,8 +14,8 @@ def data_dir() -> str:
     return ensure_dir(settings.data_dir)
 
 
-def job_dir(kind: str, project_id: int, job_id: int) -> str:
-    base = Path(data_dir()) / kind / f"project_{project_id}" / f"job_{job_id}"
+def job_dir(kind: str, user_id: int, job_id: int) -> str:
+    base = Path(data_dir()) / kind / f"user_{user_id}" / f"job_{job_id}"
     return ensure_dir(base)
 
 

@@ -15,20 +15,20 @@ def calc_cost(text: str) -> int:
     return utf8_bytes(text) * int(settings.credit_price_per_utf8_byte)
 
 
-def get_or_create_account(db: Session, project_id: int) -> CreditAccount:
-    acc = db.execute(select(CreditAccount).where(CreditAccount.project_id == project_id)).scalar_one_or_none()
+def get_or_create_account(db: Session, user_id: int) -> CreditAccount:
+    acc = db.execute(select(CreditAccount).where(CreditAccount.user_id == user_id)).scalar_one_or_none()
     if acc:
         return acc
-    acc = CreditAccount(project_id=project_id, balance=0)
+    acc = CreditAccount(user_id=user_id, balance=0)
     db.add(acc)
     db.flush()
     return acc
 
 
-def refund(*, db: Session, project_id: int, amount: int, ref_type: str, ref_id: str, note: str = "") -> None:
+def refund(*, db: Session, user_id: int, amount: int, ref_type: str, ref_id: str, note: str = "") -> None:
     if amount <= 0:
         return
-    acc = get_or_create_account(db, project_id)
+    acc = get_or_create_account(db, user_id)
     acc.balance += amount
     db.add(
         CreditTransaction(

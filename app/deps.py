@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import decode_access_token, decrypt_api_secret, sha256_hex, sign_openapi_request, validate_timestamp
 from app.db import AsyncSessionLocal
-from app.models import ApiKey, Project, User
+from app.models import ApiKey, User
 from app.services.kv import KV
 
 
@@ -53,10 +53,10 @@ def require_admin(user: User = Depends(require_console_user)) -> User:
 
 
 class OpenAPIPrincipal:
-    """OpenAPI 调用方身份：绑定 project。"""
+    """OpenAPI 调用方身份：绑定用户。"""
 
-    def __init__(self, *, project: Project, api_key: str):
-        self.project = project
+    def __init__(self, *, user: User, api_key: str):
+        self.user = user
         self.api_key = api_key
 
 
@@ -74,9 +74,9 @@ async def require_openapi_principal(
     api = (await db.execute(select(ApiKey).where(ApiKey.api_key == x_api_key))).scalar_one_or_none()
     if not api or not api.is_active:
         raise HTTPException(status_code=401, detail="invalid_api_key")
-    project = (await db.execute(select(Project).where(Project.id == api.project_id))).scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=401, detail="invalid_project")
+    user = (await db.execute(select(User).where(User.id == api.user_id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=401, detail="invalid_user")
 
     # nonce 防重放：同一个 api_key 下 nonce 在窗口内必须唯一
     kv = KV.from_settings()
@@ -98,7 +98,7 @@ async def require_openapi_principal(
     )
     if not secrets_compare(expected, x_signature):
         raise HTTPException(status_code=401, detail="invalid_signature")
-    return OpenAPIPrincipal(project=project, api_key=x_api_key)
+    return OpenAPIPrincipal(user=user, api_key=x_api_key)
 
 
 def secrets_compare(a: str, b: str) -> bool:
