@@ -170,10 +170,21 @@ class VoiceUpdateIn(BaseModel):
 class TTSCreatIn(BaseModel):
     voice_id: int
     text: str
+    tags: list[str] | None = Field(
+        default=None, description="可选标签列表；未提供或为空则使用默认标签"
+    )
+    speed_factor: float | None = Field(
+        default=None, description="语速，可选；未提供则使用默认值 1.0"
+    )
+    temperature: float | None = Field(
+        default=None, description="采样温度，可选；未提供则使用默认值 1.0"
+    )
+    top_k: int | None = Field(default=None, description="采样 top_k，可选；默认 5")
+    top_p: float | None = Field(default=None, description="采样 top_p，可选；默认 1.0")
 
 
 class JobOut(BaseModel):
-    id: int
+    id: str  # UUID 字符串
     status: str
     error: str = ""
 
@@ -182,6 +193,11 @@ class TTSJobOut(JobOut):
     voice_id: int
     text_utf8_bytes: int
     cost_credits: int
+    tags: list[str]
+    speed_factor: float
+    temperature: float
+    top_k: int
+    top_p: float
     output_audio_url: str = ""
 
 

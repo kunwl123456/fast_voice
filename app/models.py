@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import enum
+import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -143,6 +144,7 @@ class Voice(Base):
     description: Mapped[str] = mapped_column(String(255), default="")  # 描述
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, index=True)  # 是否公开
     preview_audio_path: Mapped[str] = mapped_column(String(255), default="")  # 本地预览音频路径
+    clone_job_uuid: Mapped[str] = mapped_column(String(36), default="", index=True)  # 来源克隆任务的 UUID（音频特征标识）
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
 
     owner: Mapped["User"] = relationship(back_populates="voices")
@@ -157,11 +159,17 @@ class TTSJob(Base):
     __tablename__ = "tts_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()))  # 对外暴露的唯一标识
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)  # 调用方（用户）
     voice_id: Mapped[int] = mapped_column(ForeignKey("voices.id"), index=True)  # 使用的音色
     text: Mapped[str] = mapped_column(Text)  # 输入文本
     text_utf8_bytes: Mapped[int] = mapped_column(Integer)  # 输入文本 UTF-8 字节数（计费依据）
     cost_credits: Mapped[int] = mapped_column(Integer)  # 扣费积分（= bytes * price）
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)  # 任务标签列表
+    speed_factor: Mapped[float] = mapped_column(Float, default=1.0)  # 语速
+    temperature: Mapped[float] = mapped_column(Float, default=1.0)  # 采样温度
+    top_k: Mapped[int] = mapped_column(Integer, default=5)  # 采样 top_k
+    top_p: Mapped[float] = mapped_column(Float, default=1.0)  # 采样 top_p
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.queued, index=True)
     error: Mapped[str] = mapped_column(String(255), default="")  # 错误码（失败时）
     output_audio_path: Mapped[str] = mapped_column(String(255), default="")  # 产出音频本地路径
@@ -180,6 +188,7 @@ class CloneJob(Base):
     __tablename__ = "clone_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()))  # 对外暴露的唯一标识
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)  # 调用方（用户）
     voice_name: Mapped[str] = mapped_column(String(120))  # 目标音色名
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)  # 产出音色是否公开
@@ -187,6 +196,7 @@ class CloneJob(Base):
     error: Mapped[str] = mapped_column(String(255), default="")
     dataset_dir: Mapped[str] = mapped_column(String(255), default="")  # 本地数据集目录（上传文件落这里）
     result_voice_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 成功后关联 voices.id
+    external_request_id: Mapped[str] = mapped_column(String(64), default="")  # 外部语音服务请求ID（如 uuid）
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=format_timezone)
 

@@ -30,16 +30,22 @@ from app.deps import (
 
 console_router = APIRouter(prefix="/console", tags=["console-tts"])
 openapi_router = APIRouter(prefix="/openapi", tags=["openapi-tts"])
+DEFAULT_TTS_TAGS = ["default"]
 
 
 def _tts_out(job: TTSJob) -> TTSJobOut:
     return TTSJobOut(
-        id=job.id,
+        id=job.uuid,
         status=job.status.value,
         error=job.error or "",
         voice_id=job.voice_id,
         text_utf8_bytes=job.text_utf8_bytes,
         cost_credits=job.cost_credits,
+        tags=job.tags or [],
+        speed_factor=job.speed_factor,
+        temperature=job.temperature,
+        top_k=job.top_k,
+        top_p=job.top_p,
         output_audio_url=(
             to_public_file_url(job.output_audio_path) if job.output_audio_path else ""
         ),
@@ -61,6 +67,15 @@ async def _create_job(
     except HTTPException:
         return not_found_response("音色不存在", {"voice_id": payload.voice_id})
 
+    tags = [t.strip() for t in (payload.tags or []) if t and t.strip()]
+    if not tags:
+        tags = DEFAULT_TTS_TAGS
+
+    speed_factor = payload.speed_factor if payload.speed_factor is not None else 1.0
+    temperature = payload.temperature if payload.temperature is not None else 1.0
+    top_k = payload.top_k if payload.top_k is not None else 5
+    top_p = payload.top_p if payload.top_p is not None else 1.0
+
     cost = calc_cost(payload.text)
     job = TTSJob(
         user_id=user_id,
@@ -68,6 +83,11 @@ async def _create_job(
         text=payload.text,
         text_utf8_bytes=b,
         cost_credits=cost,
+        tags=tags,
+        speed_factor=speed_factor,
+        temperature=temperature,
+        top_k=top_k,
+        top_p=top_p,
         status=JobStatus.queued,
     )
     db.add(job)
@@ -96,6 +116,7 @@ async def console_create_tts(
         return result  # 返回错误响应
 
     job = result
+    await db.flush()  # 确保 UUID 已生成
     # 异步：如果没有 celery broker，开发时允许直接同步跑（方便联调）
     if settings.celery_broker_url:
         from app.tasks.celery_app import celery_app
@@ -104,24 +125,24 @@ async def console_create_tts(
     else:
         run_tts_job(job.id)
 
-    job_data = JobOut(id=job.id, status=job.status.value, error=job.error or "")
+    job_data = JobOut(id=job.uuid, status=job.status.value, error=job.error or "")
     return success_response("TTS 任务创建成功", job_data.model_dump())
 
 
-@console_router.get("/tts/jobs/{job_id}")
+@console_router.get("/tts/jobs/{job_uuid}")
 async def console_get_tts(
-    job_id: int,
+    job_uuid: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
     """获取 TTS 任务详情"""
     job = (
         await db.execute(
-            select(TTSJob).where(TTSJob.id == job_id, TTSJob.user_id == user.id)
+            select(TTSJob).where(TTSJob.uuid == job_uuid, TTSJob.user_id == user.id)
         )
     ).scalar_one_or_none()
     if not job:
-        return not_found_response("任务不存在", {"job_id": job_id})
+        return not_found_response("任务不存在", {"job_uuid": job_uuid})
 
     tts_data = _tts_out(job)
     return success_response("获取成功", tts_data.model_dump())
@@ -141,7 +162,7 @@ async def openapi_create_tts(
         kv, principal.user.id, "openapi:tts:create", idempotency_key
     )
     if existed:
-        job_data = JobOut(id=int(existed), status="queued")
+        job_data = JobOut(id=existed, status="queued")
         return success_response("TTS 任务已存在（幂等）", job_data.model_dump())
 
     result = await _create_job(db, principal.user.id, payload)
@@ -149,25 +170,26 @@ async def openapi_create_tts(
         return result  # 返回错误响应
 
     job = result
+    await db.flush()  # 确保 UUID 已生成
     set_idempotency(
         kv,
         principal.user.id,
         "openapi:tts:create",
         idempotency_key,
-        str(job.id),
+        job.uuid,
         ttl_seconds=3600,
     )
     from app.tasks.celery_app import celery_app
 
     celery_app.send_task("app.tasks.jobs.run_tts_job", args=[job.id])
 
-    job_data = JobOut(id=job.id, status=job.status.value, error=job.error or "")
+    job_data = JobOut(id=job.uuid, status=job.status.value, error=job.error or "")
     return success_response("TTS 任务创建成功", job_data.model_dump())
 
 
-@openapi_router.get("/tts/jobs/{job_id}")
+@openapi_router.get("/tts/jobs/{job_uuid}")
 async def openapi_get_tts(
-    job_id: int,
+    job_uuid: str,
     db: AsyncSession = Depends(get_db),
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
 ):
@@ -175,12 +197,12 @@ async def openapi_get_tts(
     job = (
         await db.execute(
             select(TTSJob).where(
-                TTSJob.id == job_id, TTSJob.user_id == principal.user.id
+                TTSJob.uuid == job_uuid, TTSJob.user_id == principal.user.id
             )
         )
     ).scalar_one_or_none()
     if not job:
-        return not_found_response("任务不存在", {"job_id": job_id})
+        return not_found_response("任务不存在", {"job_uuid": job_uuid})
 
     tts_data = _tts_out(job)
     return success_response("获取成功", tts_data.model_dump())

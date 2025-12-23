@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +30,7 @@ openapi_router = APIRouter(prefix="/openapi", tags=["openapi-clone"])
 
 def _clone_out(job: CloneJob) -> CloneJobOut:
     return CloneJobOut(
-        id=job.id,
+        id=job.uuid,
         status=job.status.value,
         error=job.error or "",
         voice_name=job.voice_name,
@@ -55,15 +55,16 @@ async def _create_clone_job(
 
 @console_router.post("/clone/jobs")
 async def console_create_clone(
-    voice_name: str,
-    is_public: bool = False,
+    voice_name: str = Form(...),
+    is_public: bool = Form(False),
     files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
     """创建克隆任务"""
     job = await _create_clone_job(db, user.id, voice_name, is_public)
-    ds_dir = job_dir("clone_dataset", user_id=user.id, job_id=job.id)
+    await db.flush()  # 确保 UUID 已生成
+    ds_dir = job_dir("clone_dataset", user_id=user.id, job_uuid=job.uuid)
     for f in files:
         content = f.file.read()
         save_bytes(os.path.join(ds_dir, f.filename or "audio.bin"), content)
@@ -78,7 +79,7 @@ async def console_create_clone(
         run_clone_job(job.id)
 
     clone_data = CloneCreateOut(
-        id=job.id,
+        id=job.uuid,
         status=job.status.value,
         error=job.error or "",
         voice_name=job.voice_name,
@@ -86,21 +87,21 @@ async def console_create_clone(
     return success_response("克隆任务创建成功", clone_data.model_dump())
 
 
-@console_router.get("/clone/jobs/{job_id}")
+@console_router.get("/clone/jobs/{job_uuid}")
 async def console_get_clone(
-    job_id: int,
+    job_uuid: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
     """获取克隆任务详情"""
     job = (
         await db.execute(
-            select(CloneJob).where(CloneJob.id == job_id, CloneJob.user_id == user.id)
+            select(CloneJob).where(CloneJob.uuid == job_uuid, CloneJob.user_id == user.id)
         )
     ).scalar_one_or_none()
     if not job:
         raise HTTPException(
-            status_code=404, detail=not_found_response("任务不存在", {"job_id": job_id})
+            status_code=404, detail=not_found_response("任务不存在", {"job_uuid": job_uuid})
         )
 
     clone_data = _clone_out(job)
@@ -109,8 +110,8 @@ async def console_get_clone(
 
 @openapi_router.post("/clone/jobs")
 async def openapi_create_clone(
-    voice_name: str,
-    is_public: bool = False,
+    voice_name: str = Form(...),
+    is_public: bool = Form(False),
     files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
@@ -123,12 +124,13 @@ async def openapi_create_clone(
     )
     if existed:
         clone_data = CloneCreateOut(
-            id=int(existed), status="queued", voice_name=voice_name
+            id=existed, status="queued", voice_name=voice_name
         )
         return success_response("克隆任务已存在（幂等）", clone_data.model_dump())
 
     job = await _create_clone_job(db, principal.user.id, voice_name, is_public)
-    ds_dir = job_dir("clone_dataset", user_id=principal.user.id, job_id=job.id)
+    await db.flush()  # 确保 UUID 已生成
+    ds_dir = job_dir("clone_dataset", user_id=principal.user.id, job_uuid=job.uuid)
     for f in files:
         content = f.file.read()
         save_bytes(os.path.join(ds_dir, f.filename or "audio.bin"), content)
@@ -139,7 +141,7 @@ async def openapi_create_clone(
         principal.user.id,
         "openapi:clone:create",
         idempotency_key,
-        str(job.id),
+        job.uuid,
         ttl_seconds=3600,
     )
     from app.tasks.celery_app import celery_app
@@ -147,7 +149,7 @@ async def openapi_create_clone(
     celery_app.send_task("app.tasks.jobs.run_clone_job", args=[job.id])
 
     clone_data = CloneCreateOut(
-        id=job.id,
+        id=job.uuid,
         status=job.status.value,
         error=job.error or "",
         voice_name=job.voice_name,
@@ -155,9 +157,9 @@ async def openapi_create_clone(
     return success_response("克隆任务创建成功", clone_data.model_dump())
 
 
-@openapi_router.get("/clone/jobs/{job_id}")
+@openapi_router.get("/clone/jobs/{job_uuid}")
 async def openapi_get_clone(
-    job_id: int,
+    job_uuid: str,
     db: AsyncSession = Depends(get_db),
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
 ):
@@ -165,13 +167,13 @@ async def openapi_get_clone(
     job = (
         await db.execute(
             select(CloneJob).where(
-                CloneJob.id == job_id, CloneJob.user_id == principal.user.id
+                CloneJob.uuid == job_uuid, CloneJob.user_id == principal.user.id
             )
         )
     ).scalar_one_or_none()
     if not job:
         raise HTTPException(
-            status_code=404, detail=not_found_response("任务不存在", {"job_id": job_id})
+            status_code=404, detail=not_found_response("任务不存在", {"job_uuid": job_uuid})
         )
 
     clone_data = _clone_out(job)

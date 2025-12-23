@@ -87,6 +87,7 @@ CREATE TABLE voices (
     description VARCHAR(255) NOT NULL DEFAULT '',
     is_public BOOLEAN NOT NULL DEFAULT FALSE,
     preview_audio_path VARCHAR(255) NOT NULL DEFAULT '',
+    clone_job_uuid VARCHAR(36) NOT NULL DEFAULT '',
     created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Shanghai'),
     CONSTRAINT uq_voice_owner_name UNIQUE (owner_user_id, name)
 );
@@ -94,16 +95,23 @@ CREATE TABLE voices (
 -- 创建索引
 CREATE INDEX idx_voices_owner_user_id ON voices(owner_user_id);
 CREATE INDEX idx_voices_is_public ON voices(is_public);
+CREATE INDEX idx_voices_clone_job_uuid ON voices(clone_job_uuid);
 
 -- 表：tts_jobs
 -- 用途：TTS 合成任务（异步队列）。创建时预扣积分，失败自动退款
 CREATE TABLE tts_jobs (
     id SERIAL PRIMARY KEY,
+    uuid VARCHAR(36) NOT NULL UNIQUE,
     user_id INTEGER NOT NULL REFERENCES users(id),
     voice_id INTEGER NOT NULL REFERENCES voices(id),
     text TEXT NOT NULL,
     text_utf8_bytes INTEGER NOT NULL,
     cost_credits INTEGER NOT NULL,
+    tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+    speed_factor DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    temperature DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    top_k INTEGER NOT NULL DEFAULT 5,
+    top_p DOUBLE PRECISION NOT NULL DEFAULT 1.0,
     status job_status NOT NULL DEFAULT 'queued',
     error VARCHAR(255) NOT NULL DEFAULT '',
     output_audio_path VARCHAR(255) NOT NULL DEFAULT '',
@@ -112,6 +120,7 @@ CREATE TABLE tts_jobs (
 );
 
 -- 创建索引
+CREATE INDEX idx_tts_jobs_uuid ON tts_jobs(uuid);
 CREATE INDEX idx_tts_jobs_user_id ON tts_jobs(user_id);
 CREATE INDEX idx_tts_jobs_voice_id ON tts_jobs(voice_id);
 CREATE INDEX idx_tts_jobs_status ON tts_jobs(status);
@@ -120,6 +129,7 @@ CREATE INDEX idx_tts_jobs_status ON tts_jobs(status);
 -- 用途：音色克隆任务（异步队列）。成功后产出 Voice（result_voice_id）
 CREATE TABLE clone_jobs (
     id SERIAL PRIMARY KEY,
+    uuid VARCHAR(36) NOT NULL UNIQUE,
     user_id INTEGER NOT NULL REFERENCES users(id),
     voice_name VARCHAR(120) NOT NULL,
     is_public BOOLEAN NOT NULL DEFAULT FALSE,
@@ -127,11 +137,13 @@ CREATE TABLE clone_jobs (
     error VARCHAR(255) NOT NULL DEFAULT '',
     dataset_dir VARCHAR(255) NOT NULL DEFAULT '',
     result_voice_id INTEGER,
+    external_request_id VARCHAR(64) NOT NULL DEFAULT '',
     created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Shanghai'),
     updated_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Shanghai')
 );
 
 -- 创建索引
+CREATE INDEX idx_clone_jobs_uuid ON clone_jobs(uuid);
 CREATE INDEX idx_clone_jobs_user_id ON clone_jobs(user_id);
 CREATE INDEX idx_clone_jobs_status ON clone_jobs(status);
 

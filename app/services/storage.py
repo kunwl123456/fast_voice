@@ -14,8 +14,9 @@ def data_dir() -> str:
     return ensure_dir(settings.data_dir)
 
 
-def job_dir(kind: str, user_id: int, job_id: int) -> str:
-    base = Path(data_dir()) / kind / f"user_{user_id}" / f"job_{job_id}"
+def job_dir(kind: str, user_id: int, job_uuid: str) -> str:
+    """生成任务目录，使用 user_id_uuid 格式"""
+    base = Path(data_dir()) / kind / f"{user_id}_{job_uuid}"
     return ensure_dir(base)
 
 
