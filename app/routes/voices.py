@@ -20,7 +20,7 @@ openapi_router = APIRouter(prefix="/openapi", tags=["openapi-voices"])
 
 def _voice_out(v: Voice) -> VoiceOut:
     return VoiceOut(
-        id=v.id,
+        id=v.uuid,  # 返回 UUID 而不是数字 ID
         name=v.name,
         description=v.description,
         is_public=v.is_public,
@@ -51,21 +51,21 @@ async def my_voices(
     return success_response("获取成功", voices_data)
 
 
-@console_router.patch("/voices/{voice_id}")
+@console_router.patch("/voices/{voice_uuid}")
 async def update_voice(
-    voice_id: int,
+    voice_uuid: str,
     payload: VoiceUpdateIn,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
     """更新音色信息"""
     v = (
-        await db.execute(select(Voice).where(Voice.id == voice_id))
+        await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
     if not v:
         raise HTTPException(
             status_code=404,
-            detail=not_found_response("音色不存在", {"voice_id": voice_id}),
+            detail=not_found_response("音色不存在", {"voice_uuid": voice_uuid}),
         )
     if v.owner_user_id != user.id:
         raise HTTPException(

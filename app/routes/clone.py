@@ -34,7 +34,7 @@ def _clone_out(job: CloneJob) -> CloneJobOut:
         status=job.status.value,
         error=job.error or "",
         voice_name=job.voice_name,
-        result_voice_id=job.result_voice_id,
+        result_voice_uuid=job.result_voice_uuid,
     )
 
 

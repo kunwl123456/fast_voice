@@ -67,7 +67,7 @@ def run_tts_job(job_id: int) -> None:
         # 提前读取属性，避免 DetachedInstanceError
         user_id = job.user_id
         job_uuid = job.uuid
-        voice_id = job.voice_id
+        voice_uuid = job.voice_uuid
         job_text = job.text
         speed_factor = job.speed_factor or 1.0
         temperature = job.temperature or 1.0
@@ -84,12 +84,12 @@ def run_tts_job(job_id: int) -> None:
         used_fallback = False
         clone_uuid: str | None = None
         with SessionLocalSync() as db:
-            voice = db.execute(select(Voice).where(Voice.id == voice_id)).scalar_one_or_none()
+            voice = db.execute(select(Voice).where(Voice.uuid == voice_uuid)).scalar_one_or_none()
             if voice and voice.clone_job_uuid:
                 clone_uuid = voice.clone_job_uuid
-                logger.info("Found voice id=%s, clone_job_uuid=%s", voice_id, clone_uuid)
+                logger.info("Found voice uuid=%s, clone_job_uuid=%s", voice_uuid, clone_uuid)
             else:
-                logger.warning("Voice id=%s not found or missing clone_job_uuid", voice_id)
+                logger.warning("Voice uuid=%s not found or missing clone_job_uuid", voice_uuid)
 
         logger.info("TTS config: base_url=%s, clone_uuid=%s", base_url, clone_uuid)
         if base_url and clone_uuid:
@@ -122,7 +122,7 @@ def run_tts_job(job_id: int) -> None:
             if not base_url:
                 logger.warning("VOICE_TTS_BASE_URL not set, using fallback dummy wav")
             if not clone_uuid:
-                logger.warning("no clone_job_uuid found for voice_id=%s", voice_id)
+                logger.warning("no clone_job_uuid found for voice_uuid=%s", voice_uuid)
             _write_dummy_wav(out_path, seconds=1.0)
             used_fallback = True
 
@@ -228,7 +228,7 @@ def run_clone_job(job_id: int) -> None:
             preview_path = os.path.join(out_dir, "preview.wav")
             shutil.copyfile(selected_audio_path, preview_path)
             v.preview_audio_path = preview_path
-            job.result_voice_id = v.id
+            job.result_voice_uuid = v.uuid  # 保存生成的音色 UUID
             job.external_request_id = job.uuid  # 使用克隆任务的 UUID 作为 external_request_id
             job.status = JobStatus.succeeded
             job.updated_at = format_timezone()

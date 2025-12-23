@@ -18,7 +18,7 @@ from app.responses import (
 from app.services.kv import KV
 from app.core.config import settings
 from app.tasks.jobs import run_tts_job
-from app.models import JobStatus, TTSJob, User
+from app.models import JobStatus, TTSJob, User, CloneJob, Voice
 from app.services.storage import to_public_file_url
 from app.routes.shared import ensure_user_owns_voice
 from app.schemas import JobOut, TTSJobOut, TTSCreatIn
@@ -42,7 +42,7 @@ def _tts_out(job: TTSJob) -> TTSJobOut:
         id=job.uuid,
         status=job.status.value,
         error=job.error or "",
-        voice_id=job.voice_id,
+        voice_uuid=job.voice_uuid,  # 返回音色 UUID
         text_utf8_bytes=job.text_utf8_bytes,
         cost_credits=job.cost_credits,
         tags=job.tags or [],
@@ -66,10 +66,48 @@ async def _create_job(
             "文本过长", {"max_bytes": settings.max_text_utf8_bytes, "current_bytes": b}
         )
 
-    try:
-        await ensure_user_owns_voice(db, user_id, payload.voice_id)
-    except HTTPException:
-        return not_found_response("音色不存在", {"voice_id": payload.voice_id})
+    # 根据 clone_job_id 查找对应的克隆任务
+    clone_job = (
+        await db.execute(
+            select(CloneJob).where(
+                CloneJob.uuid == payload.clone_job_id,
+                CloneJob.user_id == user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    
+    if not clone_job:
+        return not_found_response("克隆任务不存在", {"clone_job_id": payload.clone_job_id})
+    
+    if clone_job.status != JobStatus.succeeded:
+        return bad_request_response(
+            "克隆任务未完成",
+            {
+                "clone_job_id": payload.clone_job_id,
+                "current_status": clone_job.status.value,
+                "message": "请等待克隆任务完成后再创建 TTS 任务",
+            },
+        )
+    
+    if not clone_job.result_voice_uuid:
+        return error_response(
+            "克隆任务异常：未生成音色 UUID",
+            {"clone_job_id": payload.clone_job_id},
+        )
+    
+    # 使用克隆任务生成的音色 UUID
+    voice_uuid = clone_job.result_voice_uuid
+    
+    # 验证音色存在且用户有权限使用
+    voice = (
+        await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
+    ).scalar_one_or_none()
+    
+    if not voice:
+        return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
+    
+    if voice.owner_user_id != user_id and not voice.is_public:
+        return error_response("无权使用该音色", {"voice_uuid": voice_uuid})
 
     tags = [t.strip() for t in (payload.tags or []) if t and t.strip()]
     if not tags:
@@ -83,7 +121,7 @@ async def _create_job(
     cost = calc_cost(payload.text)
     job = TTSJob(
         user_id=user_id,
-        voice_id=payload.voice_id,
+        voice_uuid=voice_uuid,  # 使用从克隆任务获取的 voice_uuid
         text=payload.text,
         text_utf8_bytes=b,
         cost_credits=cost,

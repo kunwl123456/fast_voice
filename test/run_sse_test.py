@@ -7,8 +7,8 @@
 - TEST_EMAIL: 测试账号邮箱
 - TEST_PASSWORD: 测试账号密码
 - TEST_TOKEN: Bearer Token（优先级高于邮箱密码）
+- TEST_CLONE_JOB_ID: 克隆任务 UUID（必需）
 - API_URL: API 地址（默认 http://localhost:8000）
-- VOICE_ID: 音色 ID（默认 1）
 """
 import asyncio
 import json
@@ -92,7 +92,7 @@ async def login_and_get_token(base_url: str, email: str, password: str) -> str:
         return result["data"]["access_token"]
 
 
-async def test_sse_tts(base_url: str = "http://localhost:8000", voice_id: int = 1, 
+async def test_sse_tts(base_url: str = "http://localhost:8000", clone_job_id: str = None, 
                        token: str = None, email: str = None, password: str = None):
     """测试 SSE TTS 功能"""
     
@@ -135,7 +135,7 @@ async def test_sse_tts(base_url: str = "http://localhost:8000", voice_id: int = 
         # 1. 创建任务
         print(f"\n🚀 步骤 1: 创建 TTS 任务...")
         print(f"   - API: {base_url}/console/tts/jobs")
-        print(f"   - Voice ID: {voice_id}")
+        print(f"   - Clone Job ID: {clone_job_id}")
         
         start_time = time.time()
         
@@ -143,7 +143,7 @@ async def test_sse_tts(base_url: str = "http://localhost:8000", voice_id: int = 
             create_response = await client.post(
                 f"{base_url}/console/tts/jobs",
                 json={
-                    "voice_id": voice_id,
+                    "clone_job_id": clone_job_id,
                     "text": text,
                 },
                 headers=headers,
@@ -300,7 +300,6 @@ async def main():
     """主函数"""
     # 从环境变量获取配置
     BASE_URL = os.getenv("API_URL", "http://localhost:8000")
-    VOICE_ID = int(os.getenv("VOICE_ID", "1"))
     
     print("\n" + "=" * 70)
     print("🎤 TTS SSE 测试 - 长文本（接近 4000 字节限制）")
@@ -308,13 +307,27 @@ async def main():
     
     print("\n💡 前置条件:")
     print("   1. 确保服务已启动: docker-compose up -d")
-    print("   2. 确保已创建 voice_id=1 的音色")
-    print("   3. 需要有测试账号\n")
+    print("   2. 先创建克隆任务并等待完成: POST /console/clone/jobs")
+    print("   3. 需要有测试账号")
+    print("   4. 设置环境变量 TEST_CLONE_JOB_ID（克隆任务的 UUID）\n")
     
     # 检查环境变量
     token = os.getenv("TEST_TOKEN")
     email = os.getenv("TEST_EMAIL")
     password = os.getenv("TEST_PASSWORD")
+    clone_job_id = os.getenv("TEST_CLONE_JOB_ID")
+    
+    # 检查或输入 clone_job_id
+    if not clone_job_id:
+        clone_job_id = input("\n请输入克隆任务 UUID (Clone Job ID): ").strip()
+        if not clone_job_id:
+            print("❌ Clone Job ID 不能为空")
+            print("\n提示: 先创建克隆任务并等待完成:")
+            print("  curl -X POST http://localhost:8000/console/clone/jobs \\")
+            print("       -H 'Authorization: Bearer YOUR_TOKEN' \\")
+            print("       -F 'voice_name=测试音色' \\")
+            print("       -F 'files=@audio.wav'")
+            sys.exit(1)
     
     if token:
         print("🔑 使用环境变量 TEST_TOKEN")
@@ -322,7 +335,7 @@ async def main():
         print(f"🔐 使用环境变量 TEST_EMAIL ({email})")
     else:
         # 交互式输入
-        print("🔐 认证方式:")
+        print("\n🔐 认证方式:")
         print("   1. 使用邮箱密码登录（推荐）")
         print("   2. 使用已有的 Bearer Token")
         print("   3. 跳过认证（仅用于测试无认证端点）\n")
@@ -353,7 +366,7 @@ async def main():
     # 运行测试
     success = await test_sse_tts(
         base_url=BASE_URL,
-        voice_id=VOICE_ID,
+        clone_job_id=clone_job_id,
         token=token,
         email=email,
         password=password

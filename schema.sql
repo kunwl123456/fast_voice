@@ -82,6 +82,7 @@ CREATE INDEX idx_credit_transactions_tx_type ON credit_transactions(tx_type);
 -- 用途：音色实体（克隆结果）。公开音色即进入"声音大厅"
 CREATE TABLE voices (
     id SERIAL PRIMARY KEY,
+    uuid VARCHAR(36) NOT NULL UNIQUE,
     owner_user_id INTEGER NOT NULL REFERENCES users(id),
     name VARCHAR(120) NOT NULL,
     description VARCHAR(255) NOT NULL DEFAULT '',
@@ -93,6 +94,7 @@ CREATE TABLE voices (
 );
 
 -- 创建索引
+CREATE INDEX idx_voices_uuid ON voices(uuid);
 CREATE INDEX idx_voices_owner_user_id ON voices(owner_user_id);
 CREATE INDEX idx_voices_is_public ON voices(is_public);
 CREATE INDEX idx_voices_clone_job_uuid ON voices(clone_job_uuid);
@@ -103,7 +105,7 @@ CREATE TABLE tts_jobs (
     id SERIAL PRIMARY KEY,
     uuid VARCHAR(36) NOT NULL UNIQUE,
     user_id INTEGER NOT NULL REFERENCES users(id),
-    voice_id INTEGER NOT NULL REFERENCES voices(id),
+    voice_uuid VARCHAR(36) NOT NULL REFERENCES voices(uuid),
     text TEXT NOT NULL,
     text_utf8_bytes INTEGER NOT NULL,
     cost_credits INTEGER NOT NULL,
@@ -123,7 +125,7 @@ CREATE TABLE tts_jobs (
 -- 创建索引
 CREATE INDEX idx_tts_jobs_uuid ON tts_jobs(uuid);
 CREATE INDEX idx_tts_jobs_user_id ON tts_jobs(user_id);
-CREATE INDEX idx_tts_jobs_voice_id ON tts_jobs(voice_id);
+CREATE INDEX idx_tts_jobs_voice_uuid ON tts_jobs(voice_uuid);
 CREATE INDEX idx_tts_jobs_status ON tts_jobs(status);
 
 -- 表：clone_jobs
@@ -137,7 +139,7 @@ CREATE TABLE clone_jobs (
     status job_status NOT NULL DEFAULT 'queued',
     error VARCHAR(255) NOT NULL DEFAULT '',
     dataset_dir VARCHAR(255) NOT NULL DEFAULT '',
-    result_voice_id INTEGER,
+    result_voice_uuid VARCHAR(36),
     external_request_id VARCHAR(64) NOT NULL DEFAULT '',
     created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Shanghai'),
     updated_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Shanghai')

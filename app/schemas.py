@@ -159,7 +159,7 @@ class UpgradeSubscriptionIn(BaseModel):
 
 
 class VoiceOut(BaseModel):
-    id: int
+    id: str  # Voice 的 UUID
     name: str
     description: str
     is_public: bool
@@ -172,7 +172,7 @@ class VoiceUpdateIn(BaseModel):
 
 
 class TTSCreatIn(BaseModel):
-    voice_id: int
+    clone_job_id: str = Field(..., description="克隆任务的 UUID（/console/clone/jobs 返回的 data.id）")
     text: str
     tags: list[str] | None = Field(
         default=None, description="可选标签列表；未提供或为空则使用默认标签"
@@ -197,7 +197,7 @@ class JobOut(BaseModel):
 
 
 class TTSJobOut(JobOut):
-    voice_id: int
+    voice_uuid: str  # 使用的音色 UUID
     text_utf8_bytes: int
     cost_credits: int
     tags: list[str]
@@ -214,4 +214,4 @@ class CloneCreateOut(JobOut):
 
 class CloneJobOut(JobOut):
     voice_name: str
-    result_voice_id: int | None = None
+    result_voice_uuid: str | None = None  # 克隆成功后生成的音色 UUID
