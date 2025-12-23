@@ -1,28 +1,30 @@
+x-common-environment: &common-environment
+  TZ: Asia/Shanghai
+  DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/fast_voice
+  DATABASE_URL_SYNC: postgresql+psycopg://postgres:postgres@db:5432/fast_voice
+  DB_POOL_SIZE: "10"
+  DB_MAX_OVERFLOW: "20"
+  DB_POOL_TIMEOUT_SECONDS: "30"
+  DB_POOL_RECYCLE_SECONDS: "1800"
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+  JWT_SECRET: f77a006515c2020c609f248b31c56a09
+  DATA_DIR: /data
+  VOICE_SVC_BASE_URL: "http://192.168.1.5:4000"
+  VOICE_TTS_BASE_URL: "http://192.168.1.5:7000"
+
 services:
   api:
     build:
       context: .
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/fast_voice
-      DATABASE_URL_SYNC: postgresql+psycopg://postgres:postgres@db:5432/fast_voice
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
-      JWT_SECRET: change-me
-      API_SECRET_ENC_KEY: change-me-32-bytes-base64-fernet-key
+      <<: *common-environment
       AUTO_CREATE_DB: true
       ADMIN_BOOTSTRAP: true
       ADMIN_EMAIL: admin@autogame.ai
       ADMIN_PASSWORD: 123456
-      CREDIT_PRICE_PER_UTF8_BYTE: "1"
-      SIGNATURE_TIME_WINDOW_SECONDS: "300"
-      MAX_TEXT_UTF8_BYTES: "4000"
-      DATA_DIR: /data
-      DB_POOL_SIZE: "10"
-      DB_MAX_OVERFLOW: "20"
-      DB_POOL_TIMEOUT_SECONDS: "30"
-      DB_POOL_RECYCLE_SECONDS: "1800"
     volumes:
       - fast_voice_data:/data
     ports:
@@ -36,27 +38,9 @@ services:
       dockerfile: Dockerfile
     command: ["uv", "run", "celery", "-A", "app.tasks.celery_app:celery_app", "worker", "-l", "INFO", "-Q", "tts,clone"]
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/fast_voice
-      DATABASE_URL_SYNC: postgresql+psycopg://postgres:postgres@db:5432/fast_voice
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
-      JWT_SECRET: change-me
-      API_SECRET_ENC_KEY: change-me-32-bytes-base64-fernet-key
+      <<: *common-environment
       AUTO_CREATE_DB: false
       ADMIN_BOOTSTRAP: false
-      ADMIN_EMAIL: admin@autogame.ai
-      ADMIN_PASSWORD: 123456
-      CREDIT_PRICE_PER_UTF8_BYTE: "1"
-      SIGNATURE_TIME_WINDOW_SECONDS: "300"
-      MAX_TEXT_UTF8_BYTES: "4000"
-      DATA_DIR: /data
-      VOICE_SVC_BASE_URL: "http://192.168.1.5:4000"
-      VOICE_TTS_BASE_URL: "http://192.168.1.5:7000"
-      DB_POOL_SIZE: "10"
-      DB_MAX_OVERFLOW: "20"
-      DB_POOL_TIMEOUT_SECONDS: "30"
-      DB_POOL_RECYCLE_SECONDS: "1800"
     volumes:
       - fast_voice_data:/data
     depends_on:
@@ -70,10 +54,13 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
       POSTGRES_DB: fast_voice
+      TZ: Asia/Shanghai
     volumes:
       - fast_voice_db:/var/lib/postgresql/data
   redis:
     image: redis:7
+    ports:
+      - "6379:6379"
 
 volumes:
   fast_voice_db:

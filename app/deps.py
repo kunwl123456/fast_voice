@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from fastapi import Depends, Header, HTTPException, Request
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from sqlalchemy import select
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
-from app.core.security import decode_access_token, decrypt_api_secret, sha256_hex, sign_openapi_request, validate_timestamp
-from app.db import AsyncSessionLocal
 from app.models import ApiKey, User
-from app.services.kv import KV
+from app.db import AsyncSessionLocal
+from app.exceptions import PermissionException, AuthenticationException
+from app.core.security import decode_access_token
 
 
 async def get_db():
@@ -27,28 +28,37 @@ async def get_db():
         await db.close()
 
 
-async def require_console_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
+async def require_console_user(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> User:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="missing_bearer_token")
+        raise AuthenticationException("鉴权失败：缺少鉴权参数")
+
     token = auth.removeprefix("Bearer ").strip()
     try:
         payload = decode_access_token(token)
     except ValueError:
-        raise HTTPException(status_code=401, detail="invalid_token")
+        raise AuthenticationException("鉴权失败：请检查API Key是否存在")
+
     sub = payload.get("sub")
     if not sub or not str(sub).startswith("user:"):
-        raise HTTPException(status_code=401, detail="invalid_token_subject")
+        raise AuthenticationException("鉴权失败：请检查API Key是否存在")
+
     user_id = int(str(sub).split(":", 1)[1])
-    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    user = (
+        await db.execute(select(User).where(User.id == user_id))
+    ).scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=401, detail="user_not_found")
+        raise AuthenticationException("鉴权失败：未找到用户")
+
     return user
 
 
 def require_admin(user: User = Depends(require_console_user)) -> User:
     if not user.is_admin:
-        raise HTTPException(status_code=403, detail="admin_required")
+        raise PermissionException("暂无权限操作！")
+
     return user
 
 
@@ -63,51 +73,34 @@ class OpenAPIPrincipal:
 async def require_openapi_principal(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    x_api_key: str = Header(..., alias="X-API-Key"),
-    x_timestamp: str = Header(..., alias="X-Timestamp"),
-    x_nonce: str = Header(..., alias="X-Nonce"),
-    x_signature: str = Header(..., alias="X-Signature"),
 ) -> OpenAPIPrincipal:
-    if not validate_timestamp(x_timestamp):
-        raise HTTPException(status_code=401, detail="invalid_timestamp")
+    """简化的 OpenAPI 鉴权：使用 Authorization Bearer 头部携带 API Key"""
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise AuthenticationException("鉴权失败：缺少鉴权参数")
 
-    api = (await db.execute(select(ApiKey).where(ApiKey.api_key == x_api_key))).scalar_one_or_none()
+    api_key_value = auth.removeprefix("Bearer ").strip()
+    if not api_key_value:
+        raise AuthenticationException("鉴权失败：缺少鉴权参数")
+
+    # 查询 API Key
+    api = (
+        await db.execute(select(ApiKey).where(ApiKey.api_key == api_key_value))
+    ).scalar_one_or_none()
+
     if not api or not api.is_active:
-        raise HTTPException(status_code=401, detail="invalid_api_key")
-    user = (await db.execute(select(User).where(User.id == api.user_id))).scalar_one_or_none()
+        raise AuthenticationException("鉴权失败：API Token不存在或已禁用")
+
+    # 检查有效期（使用带时区的时间进行比较）
+    if api.expires_at and api.expires_at < datetime.now(ZoneInfo("Asia/Shanghai")):
+        raise AuthenticationException("鉴权失败：API Token已过期")
+
+    # 查询用户
+    user = (
+        await db.execute(select(User).where(User.id == api.user_id))
+    ).scalar_one_or_none()
+
     if not user:
-        raise HTTPException(status_code=401, detail="invalid_user")
+        raise AuthenticationException("鉴权失败：未找到用户")
 
-    # nonce 防重放：同一个 api_key 下 nonce 在窗口内必须唯一
-    kv = KV.from_settings()
-    nonce_key = f"nonce:{x_api_key}:{x_nonce}"
-    if not kv.setnx_ttl(nonce_key, "1", settings.signature_time_window_seconds):
-        raise HTTPException(status_code=401, detail="replayed_nonce")
-
-    body = request.state.raw_body if hasattr(request.state, "raw_body") else b""
-    body_sha = sha256_hex(body)
-    query = request.url.query
-    expected = sign_openapi_request(
-        secret=decrypt_api_secret(api.api_secret_ciphertext),
-        method=request.method,
-        path=request.url.path,
-        query=query,
-        body_sha256=body_sha,
-        timestamp=x_timestamp,
-        nonce=x_nonce,
-    )
-    if not secrets_compare(expected, x_signature):
-        raise HTTPException(status_code=401, detail="invalid_signature")
-    return OpenAPIPrincipal(user=user, api_key=x_api_key)
-
-
-def secrets_compare(a: str, b: str) -> bool:
-    """常量时间比较，避免 timing attack。"""
-    if len(a) != len(b):
-        return False
-    result = 0
-    for x, y in zip(a.encode("utf-8"), b.encode("utf-8")):
-        result |= x ^ y
-    return result == 0
-
-
+    return OpenAPIPrincipal(user=user, api_key=api_key_value)

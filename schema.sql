@@ -33,15 +33,15 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_subscription_plan ON users(subscription_plan);
 
 -- 表：api_keys
--- 用途：OpenAPI 鉴权凭证（api_key 公开，api_secret 仅用于签名，服务端加密存储）
+-- 用途：OpenAPI 鉴权凭证
 -- 权限：仅企业版用户可创建
 CREATE TABLE api_keys (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
     api_key VARCHAR(128) NOT NULL UNIQUE,
-    api_secret_ciphertext TEXT NOT NULL,
     name VARCHAR(100) NOT NULL DEFAULT '',
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    expires_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Shanghai')
 );
 
@@ -170,7 +170,7 @@ CREATE INDEX idx_api_request_logs_created_at ON api_request_logs(created_at);
 
 -- 注释说明
 COMMENT ON TABLE users IS '用户账号（登录/改名/改密码），直接拥有API Key、积分账户等资源';
-COMMENT ON TABLE api_keys IS 'OpenAPI 鉴权凭证（仅企业版用户可创建）';
+COMMENT ON TABLE api_keys IS 'OpenAPI 鉴权凭证（api_key 以 sk- 开头，仅企业版用户可创建）';
 COMMENT ON TABLE credit_accounts IS '用户积分账户（余额）';
 COMMENT ON TABLE credit_transactions IS '积分流水（记账/对账/追踪扣费原因）';
 COMMENT ON TABLE voices IS '音色实体（克隆结果）。公开音色即进入"声音大厅"';
@@ -189,10 +189,10 @@ COMMENT ON COLUMN users.subscription_ends_at IS '订阅到期时间（免费版�
 COMMENT ON COLUMN users.created_at IS '创建时间';
 
 COMMENT ON COLUMN api_keys.user_id IS '所属用户';
-COMMENT ON COLUMN api_keys.api_key IS '公开 key（请求头 X-API-Key）';
-COMMENT ON COLUMN api_keys.api_secret_ciphertext IS 'Fernet 加密后的 secret';
+COMMENT ON COLUMN api_keys.api_key IS 'API Key（以 sk- 开头，用于 Bearer Token）';
 COMMENT ON COLUMN api_keys.name IS '密钥名称（用于展示）';
 COMMENT ON COLUMN api_keys.is_active IS '是否启用';
+COMMENT ON COLUMN api_keys.expires_at IS '有效期（为空表示永久有效）';
 
 COMMENT ON COLUMN credit_accounts.user_id IS '1 user : 1 account';
 COMMENT ON COLUMN credit_accounts.balance IS '当前余额（积分）';

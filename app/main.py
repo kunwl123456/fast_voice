@@ -3,55 +3,57 @@ from __future__ import annotations
 import os
 from loguru import logger
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.core.config import settings
-from app.db import Base, engine, AsyncSessionLocal
 from app.models import *  # noqa: F401,F403 (ensure models imported for metadata)
 from app.responses import (
     server_error_response,
     bad_request_response,
+    unauthorized_response,
+    forbidden_response,
 )
-from app.routes.api_docs import router as api_docs_router
-from app.routes.clone import console_router as clone_console_router
-from app.routes.clone import openapi_router as clone_openapi_router
+from app.exceptions import (
+    PermissionException,
+    AuthenticationException,
+)
+from app.core.config import settings
+from app.services.storage import ensure_dir
+from app.services.bootstrap import bootstrap_admin
+from app.db import Base, engine, AsyncSessionLocal
 from app.routes.console import router as console_router
-from app.routes.openapi_docs import router as openapi_docs_router
+from app.routes.api_docs import router as api_docs_router
 from app.routes.tts import console_router as tts_console_router
 from app.routes.tts import openapi_router as tts_openapi_router
+from app.routes.openapi_docs import router as openapi_docs_router
+from app.routes.clone import console_router as clone_console_router
+from app.routes.clone import openapi_router as clone_openapi_router
 from app.routes.voices import console_router as voices_console_router
 from app.routes.voices import openapi_router as voices_openapi_router
-from app.services.bootstrap import bootstrap_admin
-from app.services.storage import ensure_dir
 
 
 app = FastAPI(title="fast_voice", version="0.1.0")
 
 
-@app.middleware("http")
-async def capture_raw_body(request: Request, call_next):
-    """
-    OpenAPI 签名需要“原始 body bytes”的 sha256，因此这里缓存 raw body 到 request.state。
-    """
-    body = await request.body()
-    request.state.raw_body = body
-
-    async def receive():
-        return {"type": "http.request", "body": body, "more_body": False}
-
-    request._receive = receive  # type: ignore[attr-defined]
-    return await call_next(request)
-
-
 @app.exception_handler(ValueError)
-async def value_error_handler(request: Request, exc: ValueError):
+async def value_error_handler(_: Request, exc: ValueError):
     """处理 ValueError 并返回统一格式"""
-    return JSONResponse(status_code=400, content=bad_request_response(str(exc)))
+    return bad_request_response(str(exc))
+
+
+@app.exception_handler(AuthenticationException)
+async def authentication_error_handler(_: Request, exc: AuthenticationException):
+    """处理 AuthenticationException 并返回统一格式"""
+    return unauthorized_response(str(exc))
+
+
+@app.exception_handler(PermissionException)
+async def permission_error_handler(_: Request, exc: PermissionException):
+    """处理 PermissionException 并返回统一格式"""
+    return forbidden_response(str(exc))
 
 
 @app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
+async def general_exception_handler(_: Request, exc: Exception):
     """处理所有未捕获的异常"""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
 
@@ -59,11 +61,9 @@ async def general_exception_handler(request: Request, exc: Exception):
     is_dev = os.getenv("ENV", "production").lower() in ("development", "dev", "local")
 
     if is_dev:
-        content = server_error_response("服务器内部错误", {"detail": str(exc)})
+        return server_error_response("服务器内部错误", {"detail": str(exc)})
     else:
-        content = server_error_response("服务器内部错误")
-
-    return JSONResponse(status_code=500, content=content)
+        return server_error_response("服务器内部错误")
 
 
 async def init_db() -> None:

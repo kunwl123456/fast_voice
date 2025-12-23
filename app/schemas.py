@@ -54,16 +54,17 @@ class SubscriptionInfo(BaseModel):
 
 class ApiKeyOut(BaseModel):
     api_key: str
-    api_secret: str
+    expires_at: str | None  # ISO 格式的过期时间，None 表示永不过期
 
 
 class ApiKeyListItem(BaseModel):
-    """API Key列表项（不包含secret）"""
+    """API Key列表项"""
 
     id: int
     name: str
-    api_key_masked: str  # 脱敏显示，如 sk_live_...844f
+    api_key_masked: str  # 脱敏显示，如 sk-...844f
     is_active: bool
+    expires_at: str | None  # 过期时间（为空表示永久有效）
     created_at: str
 
 
@@ -71,6 +72,9 @@ class CreateApiKeyIn(BaseModel):
     """创建API Key的请求（仅企业版可用）"""
 
     name: str = Field(default="", max_length=100, description="密钥名称（可选）")
+    expires_days: int | None = Field(
+        default=None, ge=1, description="有效期天数（null表示永不过期）"
+    )
 
 
 class DashboardOut(BaseModel):

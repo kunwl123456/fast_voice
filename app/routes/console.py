@@ -29,9 +29,7 @@ from app.subscription import get_plan_config, get_plan_features
 from app.deps import get_db, require_admin, require_console_user
 from app.core.security import (
     create_access_token,
-    encrypt_api_secret,
     generate_api_key,
-    generate_api_secret,
     hash_password,
     verify_password,
 )
@@ -368,6 +366,7 @@ async def list_api_keys(
             name=k.name,
             api_key_masked=_mask_api_key(k.api_key),
             is_active=k.is_active,
+            expires_at=k.expires_at.isoformat() if k.expires_at else None,
             created_at=k.created_at.isoformat(),
         ).model_dump()
         for k in keys
@@ -386,18 +385,27 @@ async def create_api_key(
     if user.subscription_plan != SubscriptionPlan.enterprise:
         return forbidden_response("API访问需要企业版订阅")
 
-    secret = generate_api_secret()
+    # 根据传入的天数计算有效期，None 表示永不过期
+    expires_at = (
+        None
+        if payload.expires_days is None
+        else datetime.now() + timedelta(days=payload.expires_days)
+    )
+
+    api_key_value = generate_api_key()
     api = ApiKey(
         user_id=user.id,
-        api_key=generate_api_key(),
-        api_secret_ciphertext=encrypt_api_secret(secret),
+        api_key=api_key_value,
         name=payload.name,
         is_active=True,
+        expires_at=expires_at,
     )
     db.add(api)
     await db.flush()
 
-    api_key_data = ApiKeyOut(api_key=api.api_key, api_secret=secret)
+    api_key_data = ApiKeyOut(
+        api_key=api_key_value, expires_at=expires_at.isoformat() if expires_at else None
+    )
     return created_response("API Key 创建成功", api_key_data.model_dump())
 
 
@@ -424,19 +432,27 @@ async def delete_api_key(
 
 @router.post("/api-keys/rotate")
 async def rotate_api_key(
-    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
+    payload: CreateApiKeyIn = None,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console_user),
 ):
     """轮换API Key（禁用旧的，创建新的，仅企业版）"""
     if user.subscription_plan != SubscriptionPlan.enterprise:
         return forbidden_response("API访问需要企业版订阅")
 
-    secret = generate_api_secret()
+    # 如果提供了 payload，使用其中的有效期，否则默认不過期
+    if payload and payload.expires_days is not None:
+        expires_at = datetime.now() + timedelta(days=payload.expires_days)
+    else:
+        expires_at = None  # 永不过期
+
+    api_key_value = generate_api_key()
     api = ApiKey(
         user_id=user.id,
-        api_key=generate_api_key(),
-        api_secret_ciphertext=encrypt_api_secret(secret),
+        api_key=api_key_value,
         name="Production Key",
         is_active=True,
+        expires_at=expires_at,
     )
     db.add(api)
     await db.flush()
@@ -452,7 +468,9 @@ async def rotate_api_key(
             k.is_active = False
             db.add(k)
 
-    api_key_data = ApiKeyOut(api_key=api.api_key, api_secret=secret)
+    api_key_data = ApiKeyOut(
+        api_key=api_key_value, expires_at=expires_at.isoformat() if expires_at else None
+    )
     return created_response("API Key 轮换成功", api_key_data.model_dump())
 
 

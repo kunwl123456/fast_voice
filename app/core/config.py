@@ -8,9 +8,15 @@ class Settings(BaseSettings):
     说明：
     - V1 默认支持 Postgres（生产）与 SQLite（本地/测试）。
     - 连接池参数仅对非 SQLite 生效（SQLite 用 StaticPool/NullPool 更合理）。
+    - 配置来源：仅从环境变量读取（不自动加载 .env 文件）
+    - .env 文件加载由应用入口点（main.py）或测试框架（conftest.py）负责
     """
 
-    model_config = SettingsConfigDict(env_prefix="", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_prefix="",
+        case_sensitive=False,
+        env_file=None,  # 禁用自动加载 .env，由外部控制
+    )
 
     # Web API 用异步驱动（推荐）：
     # - Postgres: postgresql+asyncpg://...
@@ -50,5 +56,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
-

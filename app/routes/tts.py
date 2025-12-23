@@ -154,7 +154,7 @@ async def openapi_create_tts(
     request: Request,
     db: AsyncSession = Depends(get_db),
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
-    idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """通过 OpenAPI 创建 TTS 任务"""
     kv = KV.from_settings()
