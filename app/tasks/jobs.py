@@ -39,7 +39,7 @@ def run_tts_job(job_id: int) -> None:
         db.commit()
 
     try:
-        out_dir = job_dir("tts", project_id=job.project_id, job_id=job_id)
+        out_dir = job_dir("tts", user_id=job.user_id, job_id=job_id)
         out_path = os.path.join(out_dir, "output.wav")
         _write_dummy_wav(out_path, seconds=1.0)
         with SessionLocalSync() as db:
@@ -57,7 +57,7 @@ def run_tts_job(job_id: int) -> None:
             job.status = JobStatus.failed
             job.error = "tts_failed"
             job.updated_at = format_timezone()
-            refund(db=db, project_id=job.project_id, amount=job.cost_credits, ref_type="tts", ref_id=str(job.id))
+            refund(db=db, user_id=job.user_id, amount=job.cost_credits, ref_type="tts", ref_id=str(job.id))
             db.commit()
 
 
@@ -76,7 +76,7 @@ def run_clone_job(job_id: int) -> None:
         with SessionLocalSync() as db:
             job = db.execute(select(CloneJob).where(CloneJob.id == job_id)).scalar_one()
             v = Voice(
-                owner_project_id=job.project_id,
+                owner_user_id=job.user_id,
                 name=job.voice_name,
                 description="",
                 is_public=job.is_public,
@@ -84,7 +84,7 @@ def run_clone_job(job_id: int) -> None:
             )
             db.add(v)
             db.flush()
-            out_dir = job_dir("clone", project_id=job.project_id, job_id=job_id)
+            out_dir = job_dir("clone", user_id=job.user_id, job_id=job_id)
             preview_path = os.path.join(out_dir, "preview.wav")
             _write_dummy_wav(preview_path, seconds=1.0)
             v.preview_audio_path = preview_path
@@ -102,5 +102,6 @@ def run_clone_job(job_id: int) -> None:
             job.error = "clone_failed"
             job.updated_at = format_timezone()
             db.commit()
+
 
 

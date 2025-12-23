@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.db import Base, engine, AsyncSessionLocal
 from app.models import *  # noqa: F401,F403 (ensure models imported for metadata)
+from app.routes.api_docs import router as api_docs_router
 from app.routes.clone import console_router as clone_console_router
 from app.routes.clone import openapi_router as clone_openapi_router
 from app.routes.console import router as console_router
@@ -62,6 +63,7 @@ async def _startup():
     init_files()
 
 
+app.include_router(api_docs_router)
 app.include_router(console_router)
 app.include_router(voices_console_router)
 app.include_router(voices_openapi_router)
