@@ -39,3 +39,5 @@ htmlcov/
 docs/
 migrations/
 
+/test_front
+

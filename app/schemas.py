@@ -201,6 +201,7 @@ class VoiceOut(BaseModel):
 class VoiceUpdateIn(BaseModel):
     description: str | None = None
     is_public: bool | None = None
+    tags: list[str] | None = Field(None, description="音色标签，只能使用预设标签")
 
 
 class VoiceRenameIn(BaseModel):

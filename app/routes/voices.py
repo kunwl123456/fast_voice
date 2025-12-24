@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
-from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.responses import (
@@ -13,7 +13,7 @@ from app.models import User, Voice
 from app.deps import get_db, require_console_user
 from app.services.storage import to_public_file_url
 from app.schemas import Response, VoiceOut, VoiceUpdateIn, VoiceRenameIn
-
+from app.voice_tags import get_tag_categories, validate_tags
 
 console_router = APIRouter(prefix="/console", tags=["console-voices"])
 openapi_router = APIRouter(
@@ -68,7 +68,7 @@ async def update_voice(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
-    """更新音色信息"""
+    """更新音色信息（描述、公开状态、标签）"""
     v = (
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
@@ -76,10 +76,19 @@ async def update_voice(
         return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
     if v.owner_user_id != user.id:
         return forbidden_response("无权修改该音色")
+    
+    # 验证并更新标签
+    if payload.tags is not None:
+        is_valid, error_msg = validate_tags(payload.tags)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_msg)
+        v.tags = payload.tags
+    
     if payload.description is not None:
         v.description = payload.description
     if payload.is_public is not None:
         v.is_public = payload.is_public
+    
     db.add(v)
     await db.flush()
 
@@ -143,22 +152,43 @@ async def official_voices(db: AsyncSession = Depends(get_db)):
     return success_response("获取成功", voices_data)
 
 
+@console_router.get("/voices/tags")
+@openapi_router.get("/voices/tags")
+async def get_voice_tags():
+    """获取音色标签分类"""
+    return success_response("获取成功", get_tag_categories())
+
+
 @console_router.get("/voices/public", response_model=Response[list[VoiceOut]])
 @openapi_router.get("/voices/public", response_model=Response[list[VoiceOut]])
-async def public_voices(db: AsyncSession = Depends(get_db)):
-    """获取公共音色列表"""
-    voices = (
-        (
-            await db.execute(
-                select(Voice)
-                .where(Voice.is_public.is_(True))
-                .order_by(Voice.id.desc())
-                .limit(200)
-            )
-        )
-        .scalars()
-        .all()
-    )
+async def public_voices(
+    db: AsyncSession = Depends(get_db),
+    tags: list[str] = Query(None, description="标签筛选，可传递多个标签"),
+    limit: int = Query(200, ge=1, le=500, description="返回数量限制"),
+):
+    """
+    获取公共音色列表
+    
+    参数：
+    - tags: 标签筛选（可选），支持多个标签，满足任一标签即返回
+    - limit: 返回数量限制，默认200，最大500
+    
+    示例：
+    - /voices/public
+    - /voices/public?tags=中文&tags=女
+    - /voices/public?tags=青年&limit=50
+    """
+    query = select(Voice).where(Voice.is_public.is_(True))
+    
+    # 如果指定了标签，进行筛选
+    if tags:
+        # 使用 PostgreSQL 的数组重叠操作符 (&&) 或 SQLite 的兼容方法
+        # 这里使用 any() 来检查 tags 数组中是否包含任一指定标签
+        query = query.where(Voice.tags.overlap(tags))
+    
+    query = query.order_by(Voice.id.desc()).limit(limit)
+    
+    voices = (await db.execute(query)).scalars().all()
 
     voices_data = [_voice_out(v).model_dump() for v in voices]
     return success_response("获取成功", voices_data)
