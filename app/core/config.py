@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     jwt_issuer: str = "fast-voice"
     jwt_access_token_minutes: int = 60 * 24
     admin_email: str = "admin@autogame.ai"
-    admin_password: str = "123456"
+    admin_password: str = "Nank$CA#RKdU78tt"
 
     # Fernet key (base64 urlsafe 32-byte)，用于加密存储 api_secret
     api_secret_enc_key: str = ""
