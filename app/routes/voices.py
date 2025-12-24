@@ -118,6 +118,37 @@ async def rename_voice(
     return success_response("名字修改成功", voice_data.model_dump())
 
 
+@console_router.get("/voices/official")
+@openapi_router.get("/voices/official")
+async def official_voices(db: AsyncSession = Depends(get_db)):
+    """获取官方音色列表（autogame账号创建的音色）"""
+    # 先找到 autogame 用户
+    autogame_user = (
+        await db.execute(select(User).where(User.email == "admin@autogame.ai"))
+    ).scalar_one_or_none()
+    
+    if not autogame_user:
+        # 如果找不到官方账号，返回空列表
+        return success_response("获取成功", [])
+    
+    # 查询该用户创建的所有音色
+    voices = (
+        (
+            await db.execute(
+                select(Voice)
+                .where(Voice.owner_user_id == autogame_user.id)
+                .order_by(Voice.id.desc())
+                .limit(200)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    voices_data = [_voice_out(v).model_dump() for v in voices]
+    return success_response("获取成功", voices_data)
+
+
 @console_router.get("/voices/public")
 @openapi_router.get("/voices/public")
 async def public_voices(db: AsyncSession = Depends(get_db)):

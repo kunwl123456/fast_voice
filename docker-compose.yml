@@ -25,9 +25,9 @@ services:
       AUTO_CREATE_DB: true
       ADMIN_BOOTSTRAP: true
       ADMIN_EMAIL: admin@autogame.ai
-      ADMIN_PASSWORD: 123456
+      ADMIN_PASSWORD: Nank$$CA#RKdU78tt
     volumes:
-      - fast_voice_data:/data
+      - ./data:/data
     ports:
       - "8000:8000"
     depends_on:
@@ -43,7 +43,7 @@ services:
       AUTO_CREATE_DB: false
       ADMIN_BOOTSTRAP: false
     volumes:
-      - fast_voice_data:/data
+      - ./data:/data
     depends_on:
       - db
       - redis
@@ -65,6 +65,5 @@ services:
 
 volumes:
   fast_voice_db:
-  fast_voice_data:
 
 

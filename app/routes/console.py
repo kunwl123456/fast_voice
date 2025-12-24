@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+import os
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
@@ -25,6 +28,7 @@ from app.responses import (
     bad_request_response,
 )
 from app.services.billing import get_or_create_account, recharge
+from app.services.storage import data_dir, ensure_dir, save_bytes, to_public_file_url
 from app.subscription import get_plan_config, get_plan_features
 from app.deps import get_db, require_admin, require_console_user
 from app.core.config import settings
@@ -171,16 +175,84 @@ async def rename(
     return success_response("修改成功", user_data.model_dump())
 
 
+@router.post("/me/avatar/upload")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console_user),
+):
+    """上传用户头像图片
+    
+    支持的图片格式：jpg, jpeg, png, gif, webp
+    文件大小限制：5MB
+    """
+    # 验证文件类型
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="只支持图片格式")
+    
+    # 支持的图片扩展名
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+    file_ext = Path(file.filename or "").suffix.lower()
+    
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的图片格式，仅支持：{', '.join(allowed_extensions)}"
+        )
+    
+    # 读取文件内容并验证大小（5MB限制）
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:  # 5MB
+        raise HTTPException(status_code=400, detail="图片文件不能超过5MB")
+    
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="文件内容为空")
+    
+    # 保存文件到 data/avatars/{user_uuid}{ext}
+    avatars_dir = ensure_dir(os.path.join(data_dir(), "avatars"))
+    avatar_filename = f"{user.uuid}{file_ext}"
+    avatar_path = os.path.join(avatars_dir, avatar_filename)
+    save_bytes(avatar_path, content)
+    
+    # 生成公开访问URL
+    avatar_url = to_public_file_url(avatar_path)
+    
+    # 更新用户头像
+    user.avatar_url = avatar_url
+    db.add(user)
+    await db.flush()
+    
+    # 获取积分余额
+    acc = await get_or_create_account(db, user.id)
+    
+    user_data = MeOut(
+        id=user.uuid,
+        email=user.email,
+        display_name=user.display_name,
+        avatar_url=user.avatar_url,
+        is_admin=user.is_admin,
+        subscription_plan=user.subscription_plan.value,
+        subscription_ends_at=(
+            user.subscription_ends_at.isoformat() if user.subscription_ends_at else None
+        ),
+        credit_balance=acc.balance,
+    )
+    return success_response("头像上传成功", user_data.model_dump())
+
+
 @router.post("/me/avatar")
 async def update_avatar(
     payload: UpdateAvatarIn,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
-    """更新用户头像"""
+    """更新用户头像URL（使用外部链接）"""
     user.avatar_url = payload.avatar_url
     db.add(user)
     await db.flush()
+    
+    # 获取积分余额
+    acc = await get_or_create_account(db, user.id)
 
     user_data = MeOut(
         id=user.uuid,
@@ -192,8 +264,9 @@ async def update_avatar(
         subscription_ends_at=(
             user.subscription_ends_at.isoformat() if user.subscription_ends_at else None
         ),
+        credit_balance=acc.balance,
     )
-    return success_response("更新成功", user_data.model_dump())
+    return success_response("头像更新成功", user_data.model_dump())
 
 
 @router.post("/me/change-password")
