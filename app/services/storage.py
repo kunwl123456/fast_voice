@@ -34,9 +34,20 @@ def safe_join(*parts: str) -> str:
 def to_public_file_url(local_path: str) -> str:
     """
     把本地 DATA_DIR 下的文件映射到 /files/{relative_path}
+    支持绝对路径和相对路径
     """
+    if not local_path:
+        return ""
+    
     base = Path(data_dir()).resolve()
-    p = Path(local_path).resolve()
+    
+    # 如果是相对路径，先拼接DATA_DIR再resolve
+    path_obj = Path(local_path)
+    if not path_obj.is_absolute():
+        p = (base / local_path).resolve()
+    else:
+        p = path_obj.resolve()
+    
     try:
         rel = p.relative_to(base)
     except Exception:

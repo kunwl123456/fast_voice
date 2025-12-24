@@ -33,6 +33,7 @@ def _voice_out(v: Voice) -> VoiceOut:
         preview_audio_url=(
             to_public_file_url(v.preview_audio_path) if v.preview_audio_path else ""
         ),
+        clone_job_uuid=v.clone_job_uuid or "",  # 返回克隆任务UUID
         likes_count=v.likes_count,
         generated_chars_count=v.generated_chars_count,
         usage_count=v.usage_count,
@@ -182,9 +183,22 @@ async def public_voices(
     
     # 如果指定了标签，进行筛选
     if tags:
-        # 使用 PostgreSQL 的数组重叠操作符 (&&) 或 SQLite 的兼容方法
-        # 这里使用 any() 来检查 tags 数组中是否包含任一指定标签
-        query = query.where(Voice.tags.overlap(tags))
+        # 对于 JSON 类型的标签字段，检查是否包含任一指定标签
+        from sqlalchemy import or_, cast, String, Text
+        from sqlalchemy.dialects.postgresql import JSONB
+        
+        # 为每个标签创建一个条件：Voice.tags 包含该标签
+        conditions = []
+        for tag in tags:
+            # PostgreSQL: 使用 @> 操作符检查 JSON 数组是否包含元素
+            # 格式: tags @> '["tag_value"]'
+            conditions.append(
+                cast(Voice.tags, JSONB).contains([tag])
+            )
+        
+        # 使用 OR 连接所有条件（满足任一标签即可）
+        if conditions:
+            query = query.where(or_(*conditions))
     
     query = query.order_by(Voice.id.desc()).limit(limit)
     

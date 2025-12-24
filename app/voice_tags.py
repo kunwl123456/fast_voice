@@ -2,151 +2,159 @@
 音色标签预设配置
 """
 
-# 音色标签分类
+# 音色标签分类 (Voice Tag Categories)
+# 基于Vocu.ai标签体系，使用英文字段
 VOICE_TAG_CATEGORIES = {
-    "语言": [
-        "中文",
-        "英文",
-        "日语",
-        "韩语",
-        "粤语",
+    "language": [
+        "zh_standard",      # 标准中文
+        "yue_hk",          # 粤语（香港）
+        "ja_standard",     # 日语
+        "ko_standard",     # 韩语
+        "en_standard",     # 英语
     ],
-    "性别": [
-        "男",
-        "女",
-        "中性",
+    "gender": [
+        "female",          # 女性
+        "male",            # 男性
     ],
-    "年龄段": [
-        "幼儿",
-        "儿童",
-        "少年",
-        "青年",
-        "中年",
-        "老年",
+    "age_group": [
+        "child",           # 儿童
+        "teen",            # 少年
+        "youth",           # 青年
+        "middle_aged",     # 中年
+        "senior",          # 老年
     ],
-    "风格": [
-        "古风韵味",
-        "二次元风格",
-        "古典文艺",
-        "萌系可爱",
-        "民族风",
-        "时尚潮流",
-        "正式严肃",
-        "轻松随意",
-        "神秘阴郁",
-        "科幻感",
-        "性感撩人",
-        "深情温暖",
+    "emotion": [
+        "neutral",         # 中性
+        "gentle",          # 温柔
+        "calm",            # 平静
+        "melancholy",      # 忧郁
+        "sad",             # 悲伤
+        "excited",         # 兴奋
+        "happy",           # 快乐
+        "angry",           # 愤怒
+        "fearful",         # 恐惧
+        "surprised",       # 惊讶
+        "anxious",         # 焦虑
+        "nervous",         # 紧张
+        "curious",         # 好奇
+        "determined",      # 坚定
+        "frustrated",      # 沮丧
+        "indifferent",     # 冷漠
+        "inspiring",       # 鼓舞人心
+        "irritated",       # 恼怒
+        "nostalgic",       # 怀旧
+        "proud",           # 自豪
+        "serious",         # 严肃
+        "shy",             # 害羞
+        "sleepy",          # 困倦
+        "sympathetic",     # 同情
     ],
-    "音质与特色": [
-        "动漫拟声",
-        "ASMR 治愈型",
-        "清新纯净",
-        "空灵梦幻",
-        "少女清甜",
-        "沙哑有质感",
-        "磁性厚重",
-        "温厚老成",
-        "萌宠声音",
-        "机器合成感",
-        "娇柔甜美",
-        "少年元气",
+    "style": [
+        "ancient_style",   # 古风韵味
+        "anime_style",     # 二次元风格
+        "classic_literary", # 古典文艺
+        "cute",            # 萌系可爱
+        "fashionable",     # 时尚潮流
+        "formal",          # 正式严肃
+        "informal",        # 轻松随意
+        "mysterious_dark", # 神秘阴郁
+        "sci_fi",          # 科幻感
+        "sexy",            # 性感撩人
+        "warm",            # 深情温暖
     ],
-    "应用场景": [
-        "广告",
-        "动画角色",
-        "ASMR 放松",
-        "广播剧",
-        "有声书",
-        "睡前故事",
-        "企业宣传",
-        "客服",
-        "纪录片解说",
-        "教育培训",
-        "经验分享",
-        "游戏角色",
-        "游戏",
-        "访谈",
-        "电话语音",
-        "直播带货",
-        "冥想引导",
-        "军事历史",
-        "电影角色",
-        "电影解说",
-        "电影预告",
-        "博物馆导览",
-        "导航",
-        "新闻播报",
-        "产品说明",
-        "宣传师",
-        "公共广播",
-        "公益广告",
-        "公共交通",
-        "电台主播",
-        "房地产",
-        "景点介绍",
-        "短视频",
-        "智能家居",
-        "社交媒体",
-        "演讲",
-        "体育解说",
-        "戏剧表演",
-        "交通运输",
-        "综艺解说",
-        "虚拟主播",
-        "语音机器人",
-        "语音短信",
+    "voice_feature": [
+        "anime_imitation", # 动漫拟声
+        "asmr_healing",    # ASMR治愈型
+        "clear_pure",      # 清新纯净
+        "girl_sweet",      # 少女清甜
+        "hoarse_textured", # 沙哑有质感
+        "magnetic_deep",   # 磁性厚重
+        "mature_warm",     # 温厚老成
+        "sweet_gentle",    # 娇柔甜美
+        "teen_energetic",  # 少年元气
     ],
-    "专业领域": [
-        "航空航天",
-        "农业",
-        "动漫二次元",
-        "汽车",
-        "烹饪",
-        "环境生态",
-        "时尚美妆",
-        "金融",
-        "餐饮",
-        "法律",
-        "医疗",
-        "育儿",
-        "宠物",
-        "宗教哲学",
-        "体育",
-        "科技",
-        "旅游",
+    "scenario": [
+        "advertisement",   # 广告
+        "animation_character", # 动画角色
+        "asmr_relaxation", # ASMR放松
+        "audio_drama",     # 广播剧
+        "audiobook",       # 有声书
+        "bedtime_story",   # 睡前故事
+        "corporate_promo", # 企业宣传
+        "documentary_narration", # 纪录片解说
+        "education",       # 教育培训
+        "experience_sharing", # 经验分享
+        "game_character",  # 游戏角色
+        "gaming",          # 游戏
+        "interview",       # 访谈
+        "ivr",             # 电话语音（IVR）
+        "meditation",      # 冥想引导
+        "military_history", # 军事历史
+        "movie_character", # 电影角色
+        "movie_narration", # 电影解说
+        "movie_trailer",   # 电影预告
+        "museum_tour",     # 博物馆导览
+        "news",            # 新闻播报
+        "promotional_video", # 宣传片
+        "public_announcement", # 公共广播
+        "public_service_announcement", # 公益广告
+        "public_transport", # 公共交通
+        "radio_host",      # 电台主播
+        "short_video",     # 短视频
+        "social_media",    # 社交媒体
+        "speech",          # 演讲
+        "theater_play",    # 戏剧表演
+        "transportation",  # 交通运输
+        "virtual_streamer", # 虚拟主播
     ],
-    "语速": [
-        "非常慢",
-        "较慢",
-        "中等",
-        "较快",
-        "非常快",
+    "professional_field": [
+        "aerospace",       # 航空航天
+        "anime_acg",       # 动漫二次元
+        "automotive",      # 汽车
+        "environment_ecology", # 环境生态
+        "fashion_beauty",  # 时尚美妆
+        "finance",         # 金融
+        "legal",           # 法律
+        "parenting",       # 育儿
+        "religion_philosophy", # 宗教哲学
+        "technology",      # 科技
+        "travel",          # 旅游
     ],
-    "语速节奏": [
-        "活泼",
-        "抒情",
-        "自然",
-        "激昂",
-        "停顿感",
-        "有节奏感",
-        "流畅",
+    "speed": [
+        "slow",            # 较慢
+        "medium",          # 中等
+        "fast",            # 较快
+        "very_fast",       # 非常快
     ],
-    "语调特色": [
-        "肯定",
-        "威严",
-        "命令",
-        "自信",
-        "娇嗔",
-        "鼓励",
-        "感叹",
-        "愉快",
-        "谦逊",
-        "幽默",
-        "挑逗",
-        "疑问",
-        "请求",
-        "讽刺",
+    "rhythm": [
+        "lively",          # 活泼
+        "lyrical",         # 抒情
+        "natural",         # 自然
+        "passionate",      # 激昂
+        "paused",          # 停顿感
+        "rhythmic",        # 有节奏感
+        "smooth",          # 流畅
+    ],
+    "tone": [
+        "affirmative",     # 肯定
+        "authoritative",   # 威严
+        "confident",       # 自信
+        "coquettish",      # 娇嗔
+        "encouraging_tone", # 鼓励
+        "exclamatory",     # 感叹
+        "happy",           # 愉快
+        "humble",          # 谦逊
+        "humorous",        # 幽默
+        "provocative",     # 挑逗
+        "questioning",     # 疑问
+        "requesting",      # 请求
+        "sarcastic",       # 讽刺
+    ],
+    "effect": [
+        "dry",             # 干音
+        "indoor_echo",     # 室内回声
+        "sci_fi_robot_alien", # 科幻机器人/外星人
+        "vintage_recording", # 复古录音
     ],
 }
 

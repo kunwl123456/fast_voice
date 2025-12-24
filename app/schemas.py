@@ -192,6 +192,7 @@ class VoiceOut(BaseModel):
     tags: list[str] = []
     is_public: bool
     preview_audio_url: str = ""
+    clone_job_uuid: str = ""  # 克隆任务UUID（用于TTS）
     likes_count: int = 0  # 点赞数
     generated_chars_count: int = 0  # 生成字符数
     usage_count: int = 0  # 使用次数

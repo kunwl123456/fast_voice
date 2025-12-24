@@ -124,23 +124,21 @@ async def general_exception_handler(_: Request, exc: Exception):
 
 
 async def init_db() -> None:
-    """初始化数据库：清空旧表 -> 创建新表 -> 创建管理员"""
-    if not settings.auto_create_db:
-        return
+    """初始化数据库：确保表存在，可选清空旧表"""
+    if settings.auto_create_db:
+        # 🗑️ 开发模式：每次启动都清空所有表
+        print("⚠️  清空所有表...")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        print("✅ 所有表已清空")
 
-    # 🗑️ 每次启动都清空所有表（开发环境）
-    print("⚠️  清空所有表...")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    print("✅ 所有表已清空")
-
-    # 🏗️ 重新创建所有表
-    print("📦 重新创建表结构...")
+    # 🏗️ 确保所有表存在（如果不存在则创建）
+    print("📦 确保表结构存在...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("✅ 表结构创建完成")
+    print("✅ 表结构已就绪")
 
-    # 👤 创建管理员账号
+    # 👤 确保管理员账号存在
     async with AsyncSessionLocal() as db:
         await bootstrap_admin(db)
 
