@@ -25,7 +25,7 @@ services:
       AUTO_CREATE_DB: true
       ADMIN_BOOTSTRAP: true
       ADMIN_EMAIL: admin@autogame.ai
-      ADMIN_PASSWORD: Nank$$CA#RKdU78tt
+      ADMIN_PASSWORD: Nank$CA#RKdU78tt
     volumes:
       - ./data:/data
     ports:
