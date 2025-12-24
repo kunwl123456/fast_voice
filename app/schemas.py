@@ -27,6 +27,19 @@ class MeOut(BaseModel):
     is_admin: bool
     subscription_plan: str  # free, pro, enterprise
     subscription_ends_at: str | None  # 订阅到期时间
+    credit_balance: int  # 积分余额
+
+
+class RegisterOut(BaseModel):
+    """注册成功返回的数据"""
+    id: str  # 用户UUID
+    email: EmailStr
+    display_name: str
+    avatar_url: str  # 头像链接
+    is_admin: bool
+    subscription_plan: str  # free, pro, enterprise
+    subscription_ends_at: str | None  # 订阅到期时间
+    credit_balance: int  # 积分余额
 
 
 class RenameIn(BaseModel):

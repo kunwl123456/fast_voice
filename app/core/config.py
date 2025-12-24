@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     signature_time_window_seconds: int = 300
     credit_price_per_utf8_byte: int = 1
     max_text_utf8_bytes: int = 4000
+    register_free_point: int = 10000000  # 注册赠送积分（默认1000万）
 
     auto_create_db: bool = True
     admin_bootstrap: bool = True

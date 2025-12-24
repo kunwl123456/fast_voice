@@ -13,6 +13,7 @@ x-common-environment: &common-environment
   DATA_DIR: /data
   VOICE_SVC_BASE_URL: "http://192.168.1.5:4000"
   VOICE_TTS_BASE_URL: "http://192.168.1.5:7000"
+  REGISTER_FREE_POINT: "10000000"
 
 services:
   api:

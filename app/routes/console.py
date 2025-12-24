@@ -27,6 +27,7 @@ from app.responses import (
 from app.services.billing import get_or_create_account, recharge
 from app.subscription import get_plan_config, get_plan_features
 from app.deps import get_db, require_admin, require_console_user
+from app.core.config import settings
 from app.core.security import (
     create_access_token,
     generate_api_key,
@@ -45,6 +46,7 @@ from app.schemas import (
     MeOut,
     RechargeIn,
     RegisterIn,
+    RegisterOut,
     RenameIn,
     RequestLogOut,
     SubscriptionInfo,
@@ -77,7 +79,7 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
     await db.flush()
 
     # 创建积分账户并赠送免费版初始积分
-    acc = CreditAccount(user_id=u.id, balance=1000)
+    acc = CreditAccount(user_id=u.id, balance=settings.register_free_point)
     db.add(acc)
     await db.flush()
 
@@ -85,14 +87,14 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
     tx = CreditTransaction(
         account_id=acc.id,
         tx_type=TxType.subscription,
-        amount=1000,
+        amount=settings.register_free_point,
         ref_type="subscription",
         ref_id="free_welcome",
         note="注册赠送免费版积分",
     )
     db.add(tx)
 
-    user_data = MeOut(
+    user_data = RegisterOut(
         id=u.uuid,
         email=u.email,
         display_name=u.display_name,
@@ -102,6 +104,7 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
         subscription_ends_at=(
             u.subscription_ends_at.isoformat() if u.subscription_ends_at else None
         ),
+        credit_balance=acc.balance,
     )
 
     return created_response("注册成功", user_data.model_dump())
@@ -123,8 +126,11 @@ async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/me")
-def me(user: User = Depends(require_console_user)):
+async def me(
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
+):
     """获取当前用户信息"""
+    acc = await get_or_create_account(db, user.id)
     user_data = MeOut(
         id=user.uuid,
         email=user.email,
@@ -135,6 +141,7 @@ def me(user: User = Depends(require_console_user)):
         subscription_ends_at=(
             user.subscription_ends_at.isoformat() if user.subscription_ends_at else None
         ),
+        credit_balance=acc.balance,
     )
     return success_response("获取成功", user_data.model_dump())
 
