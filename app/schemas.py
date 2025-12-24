@@ -177,6 +177,10 @@ class VoiceUpdateIn(BaseModel):
     is_public: bool | None = None
 
 
+class VoiceRenameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120, description="音色名称")
+
+
 class TTSCreatIn(BaseModel):
     clone_job_id: str = Field(..., description="克隆任务的 UUID（/console/clone/jobs 返回的 data.id）")
     text: str

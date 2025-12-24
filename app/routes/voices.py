@@ -11,7 +11,7 @@ from app.responses import (
     not_found_response,
     forbidden_response,
 )
-from app.schemas import VoiceOut, VoiceUpdateIn
+from app.schemas import VoiceOut, VoiceUpdateIn, VoiceRenameIn
 from app.services.storage import to_public_file_url
 
 console_router = APIRouter(prefix="/console", tags=["console-voices"])
@@ -86,6 +86,36 @@ async def update_voice(
 
     voice_data = _voice_out(v)
     return success_response("更新成功", voice_data.model_dump())
+
+
+@console_router.patch("/voices/{voice_uuid}/name")
+async def rename_voice(
+    voice_uuid: str,
+    payload: VoiceRenameIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console_user),
+):
+    """修改音色名字"""
+    v = (
+        await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
+    ).scalar_one_or_none()
+    if not v:
+        raise HTTPException(
+            status_code=404,
+            detail=not_found_response("音色不存在", {"voice_uuid": voice_uuid}),
+        )
+    if v.owner_user_id != user.id:
+        raise HTTPException(
+            status_code=403, detail=forbidden_response("无权修改该音色")
+        )
+    
+    # 更新音色名字
+    v.name = payload.name
+    db.add(v)
+    await db.flush()
+
+    voice_data = _voice_out(v)
+    return success_response("名字修改成功", voice_data.model_dump())
 
 
 @console_router.get("/voices/public")
