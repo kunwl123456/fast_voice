@@ -21,8 +21,9 @@ async def bootstrap_admin(db: AsyncSession) -> None:
         print(f"ℹ️  管理员账号已存在：{settings.admin_email}")
         return
 
-    # 创建管理员用户
+    # 创建管理员用户（UUID 固定为 autogame）
     admin = User(
+        uuid="autogame",  # 固定 UUID
         email=settings.admin_email,
         password_hash=hash_password(settings.admin_password),
         display_name="admin",

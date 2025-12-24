@@ -28,7 +28,7 @@ console_router = APIRouter(prefix="/console", tags=["console-clone"])
 openapi_router = APIRouter(prefix="/openapi", tags=["openapi-clone"])
 
 
-def _clone_out(job: CloneJob) -> CloneJobOut:
+def _clone_out(job: CloneJob, user_uuid: str) -> CloneJobOut:
     # 构建预览音频URL
     preview_url = ""
     if job.result_voice_uuid and job.dataset_dir:
@@ -48,7 +48,7 @@ def _clone_out(job: CloneJob) -> CloneJobOut:
         avatar_url=job.avatar_url,
         description=job.description,
         tags=job.tags or [],
-        user_id=job.user_id,
+        user_id=user_uuid,
         created_at=job.created_at.isoformat(),
         preview_audio_url=preview_url,
         result_voice_uuid=job.result_voice_uuid,
@@ -139,7 +139,7 @@ async def console_create_clone(
         avatar_url=job.avatar_url,
         description=job.description,
         tags=job.tags or [],
-        user_id=job.user_id,
+        user_id=user.uuid,
         created_at=job.created_at.isoformat(),
         preview_audio_url="",  # 创建时还没有预览音频
     )
@@ -163,7 +163,7 @@ async def console_get_clone(
             status_code=404, detail=not_found_response("任务不存在", {"job_uuid": job_uuid})
         )
 
-    clone_data = _clone_out(job)
+    clone_data = _clone_out(job, user.uuid)
     return success_response("获取成功", clone_data.model_dump())
 
 
@@ -211,7 +211,7 @@ async def openapi_create_clone(
             )
         ).scalar_one_or_none()
         if job:
-            clone_data = _clone_out(job)
+            clone_data = _clone_out(job, principal.user.uuid)
             return success_response("克隆任务已存在（幂等）", clone_data.model_dump())
 
     job = await _create_clone_job(
@@ -245,7 +245,7 @@ async def openapi_create_clone(
         avatar_url=job.avatar_url,
         description=job.description,
         tags=job.tags or [],
-        user_id=job.user_id,
+        user_id=principal.user.uuid,
         created_at=job.created_at.isoformat(),
         preview_audio_url="",  # 创建时还没有预览音频
     )
@@ -271,5 +271,5 @@ async def openapi_get_clone(
             status_code=404, detail=not_found_response("任务不存在", {"job_uuid": job_uuid})
         )
 
-    clone_data = _clone_out(job)
+    clone_data = _clone_out(job, principal.user.uuid)
     return success_response("获取成功", clone_data.model_dump())

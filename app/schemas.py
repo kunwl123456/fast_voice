@@ -20,7 +20,7 @@ class TokenOut(BaseModel):
 
 
 class MeOut(BaseModel):
-    id: int
+    id: str  # 用户UUID
     email: EmailStr
     display_name: str
     avatar_url: str  # 头像链接
@@ -80,7 +80,7 @@ class CreateApiKeyIn(BaseModel):
 class DashboardOut(BaseModel):
     """Dashboard概览数据"""
 
-    user_id: int
+    user_id: str  # 用户UUID
     email: str
     plan_name: str
     plan_status: str  # active, expired
@@ -129,7 +129,7 @@ class PaginatedRequestLogs(BaseModel):
 
 
 class CreditAccountOut(BaseModel):
-    user_id: int
+    user_id: str  # 用户UUID
     balance: int
 
 
@@ -144,7 +144,7 @@ class CreditTxOut(BaseModel):
 
 
 class RechargeIn(BaseModel):
-    user_id: int
+    user_id: str  # 用户UUID
     amount: int = Field(gt=0, description="充值金额（必须为正数）")
     note: str = ""
 
@@ -220,7 +220,7 @@ class CloneCreateOut(JobOut):
     avatar_url: str = ""
     description: str = ""
     tags: list[str] = []
-    user_id: int
+    user_id: str  # 用户UUID
     created_at: str
     preview_audio_url: str = ""
 
@@ -230,7 +230,7 @@ class CloneJobOut(JobOut):
     avatar_url: str = ""
     description: str = ""
     tags: list[str] = []
-    user_id: int
+    user_id: str  # 用户UUID
     created_at: str
     preview_audio_url: str = ""
     result_voice_uuid: str | None = None  # 克隆成功后生成的音色 UUID

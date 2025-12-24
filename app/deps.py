@@ -45,9 +45,9 @@ async def require_console_user(
     if not sub or not str(sub).startswith("user:"):
         raise AuthenticationException("鉴权失败：请检查API Key是否存在")
 
-    user_id = int(str(sub).split(":", 1)[1])
+    user_uuid = str(sub).split(":", 1)[1]
     user = (
-        await db.execute(select(User).where(User.id == user_id))
+        await db.execute(select(User).where(User.uuid == user_uuid))
     ).scalar_one_or_none()
     if not user:
         raise AuthenticationException("鉴权失败：未找到用户")

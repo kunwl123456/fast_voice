@@ -61,7 +61,10 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # 主键
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # 主键（内部使用）
+    uuid: Mapped[str] = mapped_column(
+        String(36), unique=True, index=True, default=lambda: str(uuid.uuid4())
+    )  # 对外唯一标识
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)  # 登录邮箱
     password_hash: Mapped[str] = mapped_column(String(255))  # bcrypt hash
     display_name: Mapped[str] = mapped_column(String(100), default="")  # 展示名

@@ -93,7 +93,7 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
     db.add(tx)
 
     user_data = MeOut(
-        id=u.id,
+        id=u.uuid,
         email=u.email,
         display_name=u.display_name,
         avatar_url=u.avatar_url,
@@ -116,7 +116,7 @@ async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
     if not u or not verify_password(payload.password, u.password_hash):
         return unauthorized_response("用户名或密码错误")
 
-    token = create_access_token(subject=f"user:{u.id}")
+    token = create_access_token(subject=f"user:{u.uuid}")
     token_data = TokenOut(access_token=token)
 
     return success_response("登录成功", token_data.model_dump())
@@ -126,7 +126,7 @@ async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
 def me(user: User = Depends(require_console_user)):
     """获取当前用户信息"""
     user_data = MeOut(
-        id=user.id,
+        id=user.uuid,
         email=user.email,
         display_name=user.display_name,
         avatar_url=user.avatar_url,
@@ -151,7 +151,7 @@ async def rename(
     await db.flush()
 
     user_data = MeOut(
-        id=user.id,
+        id=user.uuid,
         email=user.email,
         display_name=user.display_name,
         avatar_url=user.avatar_url,
@@ -176,7 +176,7 @@ async def update_avatar(
     await db.flush()
 
     user_data = MeOut(
-        id=user.id,
+        id=user.uuid,
         email=user.email,
         display_name=user.display_name,
         avatar_url=user.avatar_url,
@@ -323,7 +323,7 @@ async def get_dashboard(
         plan_status = "expired"
 
     dashboard_data = DashboardOut(
-        user_id=user.id,
+        user_id=user.uuid,
         email=user.email,
         plan_name=plan_config.name,
         plan_status=plan_status,
@@ -597,7 +597,7 @@ async def credits(
 ):
     """获取积分余额"""
     acc = await get_or_create_account(db, user.id)
-    credit_data = CreditAccountOut(user_id=user.id, balance=acc.balance)
+    credit_data = CreditAccountOut(user_id=user.uuid, balance=acc.balance)
     return success_response("获取成功", credit_data.model_dump())
 
 
