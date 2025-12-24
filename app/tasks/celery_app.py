@@ -27,5 +27,3 @@ celery_app.conf.update(
 
 # 防止未注册任务：显式导入/发现 app.tasks 下的任务
 celery_app.autodiscover_tasks(["app.tasks"])
-
-

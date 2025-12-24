@@ -1,21 +1,25 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import get_db, require_console_user
-from app.models import User, Voice
 from app.responses import (
     success_response,
     not_found_response,
     forbidden_response,
 )
-from app.schemas import VoiceOut, VoiceUpdateIn, VoiceRenameIn
+from app.models import User, Voice
+from app.deps import get_db, require_console_user
 from app.services.storage import to_public_file_url
+from app.schemas import Response, VoiceOut, VoiceUpdateIn, VoiceRenameIn
+
 
 console_router = APIRouter(prefix="/console", tags=["console-voices"])
-openapi_router = APIRouter(prefix="/openapi", tags=["openapi-voices"])
+openapi_router = APIRouter(
+    prefix="/openapi",
+    tags=["openapi-voices"],
+)
 
 
 def _voice_out(v: Voice) -> VoiceOut:
@@ -36,7 +40,7 @@ def _voice_out(v: Voice) -> VoiceOut:
     )
 
 
-@console_router.get("/voices/mine")
+@console_router.get("/voices/mine", response_model=Response[list[VoiceOut]])
 async def my_voices(
     db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
 ):
@@ -57,7 +61,7 @@ async def my_voices(
     return success_response("获取成功", voices_data)
 
 
-@console_router.patch("/voices/{voice_uuid}")
+@console_router.patch("/voices/{voice_id}", response_model=Response[VoiceOut])
 async def update_voice(
     voice_uuid: str,
     payload: VoiceUpdateIn,
@@ -69,14 +73,9 @@ async def update_voice(
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
     if not v:
-        raise HTTPException(
-            status_code=404,
-            detail=not_found_response("音色不存在", {"voice_uuid": voice_uuid}),
-        )
+        return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
     if v.owner_user_id != user.id:
-        raise HTTPException(
-            status_code=403, detail=forbidden_response("无权修改该音色")
-        )
+        return forbidden_response("无权修改该音色")
     if payload.description is not None:
         v.description = payload.description
     if payload.is_public is not None:
@@ -100,15 +99,10 @@ async def rename_voice(
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
     if not v:
-        raise HTTPException(
-            status_code=404,
-            detail=not_found_response("音色不存在", {"voice_uuid": voice_uuid}),
-        )
+        return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
     if v.owner_user_id != user.id:
-        raise HTTPException(
-            status_code=403, detail=forbidden_response("无权修改该音色")
-        )
-    
+        return forbidden_response("无权修改该音色")
+
     # 更新音色名字
     v.name = payload.name
     db.add(v)
@@ -126,11 +120,11 @@ async def official_voices(db: AsyncSession = Depends(get_db)):
     autogame_user = (
         await db.execute(select(User).where(User.email == "admin@autogame.ai"))
     ).scalar_one_or_none()
-    
+
     if not autogame_user:
         # 如果找不到官方账号，返回空列表
         return success_response("获取成功", [])
-    
+
     # 查询该用户创建的所有音色
     voices = (
         (
@@ -149,8 +143,8 @@ async def official_voices(db: AsyncSession = Depends(get_db)):
     return success_response("获取成功", voices_data)
 
 
-@console_router.get("/voices/public")
-@openapi_router.get("/voices/public")
+@console_router.get("/voices/public", response_model=Response[list[VoiceOut]])
+@openapi_router.get("/voices/public", response_model=Response[list[VoiceOut]])
 async def public_voices(db: AsyncSession = Depends(get_db)):
     """获取公共音色列表"""
     voices = (
@@ -181,11 +175,8 @@ async def like_voice(
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
     if not v:
-        raise HTTPException(
-            status_code=404,
-            detail=not_found_response("音色不存在", {"voice_uuid": voice_uuid}),
-        )
-    
+        return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
+
     # 增加点赞数
     v.likes_count += 1
     db.add(v)
@@ -206,11 +197,8 @@ async def unlike_voice(
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
     if not v:
-        raise HTTPException(
-            status_code=404,
-            detail=not_found_response("音色不存在", {"voice_uuid": voice_uuid}),
-        )
-    
+        return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
+
     # 减少点赞数（但不能小于0）
     if v.likes_count > 0:
         v.likes_count -= 1

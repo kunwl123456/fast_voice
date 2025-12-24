@@ -58,5 +58,3 @@ def session_scope_sync():
         raise
     finally:
         db.close()
-
-

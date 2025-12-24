@@ -11,8 +11,10 @@ from app.responses import (
     bad_request_response,
     unauthorized_response,
     forbidden_response,
+    not_found_response,
 )
 from app.exceptions import (
+    NotFoundException,
     PermissionException,
     AuthenticationException,
 )
@@ -21,7 +23,6 @@ from app.services.storage import ensure_dir
 from app.services.bootstrap import bootstrap_admin
 from app.db import Base, engine, AsyncSessionLocal
 from app.routes.console import router as console_router
-from app.routes.api_docs import router as api_docs_router
 from app.routes.tts import console_router as tts_console_router
 from app.routes.tts import openapi_router as tts_openapi_router
 from app.routes.openapi_docs import router as openapi_docs_router
@@ -31,20 +32,40 @@ from app.routes.voices import console_router as voices_console_router
 from app.routes.voices import openapi_router as voices_openapi_router
 
 
-app = FastAPI(title="fast_voice", version="0.1.0")
+# 定义 OpenAPI tags 元数据
+tags_metadata = [
+    {
+        "name": "tts",
+        "description": "文本转语音服务，支持异步任务和实时流式输出",
+    },
+    {
+        "name": "clone",
+        "description": "音色克隆服务，通过上传音频文件创建自定义音色",
+    },
+    {
+        "name": "voices",
+        "description": "音色管理服务，包括我的音色、公开音色列表等",
+    },
+]
+
+app = FastAPI(
+    title="fast_voice",
+    version="0.1.0",
+    openapi_tags=tags_metadata,
+)
 
 
 @app.middleware("http")
 async def capture_raw_body(request: Request, call_next):
     """
     OpenAPI 签名需要"原始 body bytes"的 sha256，因此这里缓存 raw body 到 request.state。
-    
+
     注意：对于 SSE 端点（/events），跳过此中间件，因为重写 receive() 会干扰长连接
     """
     # 跳过 SSE 端点
     if request.url.path.endswith("/events"):
         return await call_next(request)
-    
+
     body = await request.body()
     request.state.raw_body = body
 
@@ -73,6 +94,12 @@ async def permission_error_handler(_: Request, exc: PermissionException):
     return forbidden_response(str(exc))
 
 
+@app.exception_handler(NotFoundException)
+async def notfound_error_handler(_: Request, exc: NotFoundException):
+    """处理 NotFoundException 并返回统一格式"""
+    return not_found_response(str(exc))
+
+
 @app.exception_handler(Exception)
 async def general_exception_handler(_: Request, exc: Exception):
     """处理所有未捕获的异常"""
@@ -83,7 +110,7 @@ async def general_exception_handler(_: Request, exc: Exception):
             logger.debug(f"StreamingResponse connection closed: {exc}")
             # 这是正常的流关闭，不做任何处理
             raise exc
-    
+
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
 
     # 生产环境不暴露详细错误（通过环境变量判断）
@@ -129,7 +156,6 @@ async def _startup():
     init_files()
 
 
-app.include_router(api_docs_router)
 app.include_router(console_router)
 app.include_router(voices_console_router)
 app.include_router(voices_openapi_router)

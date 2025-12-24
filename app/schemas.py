@@ -1,6 +1,18 @@
 from __future__ import annotations
 
+from typing import Generic, TypeVar
+
 from pydantic import BaseModel, EmailStr, Field
+
+# 定义泛型类型变量
+T = TypeVar("T")
+
+
+class Response(BaseModel, Generic[T]):
+    """统一的 API 响应格式（支持泛型）"""
+
+    message: str = Field(description="提示信息")
+    data: T = Field(description="响应体数据")
 
 
 class RegisterIn(BaseModel):
@@ -32,6 +44,7 @@ class MeOut(BaseModel):
 
 class RegisterOut(BaseModel):
     """注册成功返回的数据"""
+
     id: str  # 用户UUID
     email: EmailStr
     display_name: str
@@ -195,7 +208,9 @@ class VoiceRenameIn(BaseModel):
 
 
 class TTSCreatIn(BaseModel):
-    clone_job_id: str = Field(..., description="克隆任务的 UUID（/console/clone/jobs 返回的 data.id）")
+    clone_job_id: str = Field(
+        ..., description="克隆任务的 UUID（/console/clone/jobs 返回的 data.id）"
+    )
     text: str
     speed_factor: float | None = Field(
         default=None, description="语速，可选；未提供则使用默认值 1.0"
@@ -206,7 +221,9 @@ class TTSCreatIn(BaseModel):
     top_k: int | None = Field(default=None, description="采样 top_k，可选；默认 5")
     top_p: float | None = Field(default=None, description="采样 top_p，可选；默认 1.0")
     webhook_url: str | None = Field(
-        default=None, max_length=512, description="Webhook 回调地址，任务完成时调用；可选"
+        default=None,
+        max_length=512,
+        description="Webhook 回调地址，任务完成时调用；可选",
     )
 
 
@@ -226,6 +243,15 @@ class TTSJobOut(JobOut):
     top_k: int
     top_p: float
     output_audio_url: str = ""
+
+
+class CloneCreateIn(BaseModel):
+    voice_name: str = (Field(description="音频特征名字"),)
+    avatar_url: str = Field("", description="头像URL")
+    description: str = Field("", description="音频特征描述")
+    tags: list = Field(default=[], description="标签JSON数组")
+    is_public: bool = Field(False, description="是否公开")
+    remove_background_noise: bool = Field(False, description="是否去除背景音")
 
 
 class CloneCreateOut(JobOut):

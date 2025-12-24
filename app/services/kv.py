@@ -61,5 +61,3 @@ class KV:
             self._redis.set(key, value, ex=ttl_seconds)
             return
         self._mem[key] = (value, time.time() + ttl_seconds)
-
-

@@ -732,7 +732,7 @@ git commit -m "feat: 数据库新增 XXX 字段"
 ### 1. 启用详细日志
 
 ```python
-# app/main.py
+# app/run.py
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
@@ -1109,7 +1109,7 @@ psql -U postgres -d fast_voice -f schema.sql
 # 安装 prometheus-fastapi-instrumentator
 uv add prometheus-fastapi-instrumentator
 
-# app/main.py
+# app/run.py
 from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI()
@@ -1199,7 +1199,7 @@ output.elasticsearch:
 ### 3. 错误追踪（Sentry）
 
 ```python
-# app/main.py
+# app/run.py
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 

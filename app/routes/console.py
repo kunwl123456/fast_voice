@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
@@ -39,6 +39,7 @@ from app.core.security import (
     verify_password,
 )
 from app.schemas import (
+    Response,
     ApiKeyListItem,
     ApiKeyOut,
     ChangePasswordIn,
@@ -64,7 +65,7 @@ from app.schemas import (
 router = APIRouter(prefix="/console", tags=["console"])
 
 
-@router.post("/auth/register")
+@router.post("/auth/register", response_model=Response[MeOut])
 async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
     """用户注册"""
     existed = (
@@ -110,11 +111,10 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
         ),
         credit_balance=acc.balance,
     )
-
     return created_response("注册成功", user_data.model_dump())
 
 
-@router.post("/auth/login")
+@router.post("/auth/login", response_model=Response[TokenOut])
 async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
     """用户登录"""
     u = (
@@ -129,7 +129,7 @@ async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
     return success_response("登录成功", token_data.model_dump())
 
 
-@router.get("/me")
+@router.get("/me", response_model=Response[MeOut])
 async def me(
     db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
 ):
@@ -150,7 +150,7 @@ async def me(
     return success_response("获取成功", user_data.model_dump())
 
 
-@router.post("/me/rename")
+@router.post("/me/rename", response_model=Response[MeOut])
 async def rename(
     payload: RenameIn,
     db: AsyncSession = Depends(get_db),
@@ -182,49 +182,47 @@ async def upload_avatar(
     user: User = Depends(require_console_user),
 ):
     """上传用户头像图片
-    
+
     支持的图片格式：jpg, jpeg, png, gif, webp
     文件大小限制：5MB
     """
     # 验证文件类型
     if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="只支持图片格式")
-    
+        return bad_request_response("只支持图片格式")
+
     # 支持的图片扩展名
     allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
     file_ext = Path(file.filename or "").suffix.lower()
-    
+
     if file_ext not in allowed_extensions:
-        raise HTTPException(
-            status_code=400,
-            detail=f"不支持的图片格式，仅支持：{', '.join(allowed_extensions)}"
+        return bad_request_response(
+            f"不支持的图片格式，仅支持：{', '.join(allowed_extensions)}"
         )
-    
+
     # 读取文件内容并验证大小（5MB限制）
     content = await file.read()
     if len(content) > 5 * 1024 * 1024:  # 5MB
-        raise HTTPException(status_code=400, detail="图片文件不能超过5MB")
-    
+        return bad_request_response("图片文件不能超过5MB")
     if len(content) == 0:
-        raise HTTPException(status_code=400, detail="文件内容为空")
-    
+        return bad_request_response("文件内容为空")
+
     # 保存文件到 data/avatars/{user_uuid}{ext}
     avatars_dir = ensure_dir(os.path.join(data_dir(), "avatars"))
     avatar_filename = f"{user.uuid}{file_ext}"
     avatar_path = os.path.join(avatars_dir, avatar_filename)
     save_bytes(avatar_path, content)
-    
+
     # 生成公开访问URL
     avatar_url = to_public_file_url(avatar_path)
-    
+
     # 更新用户头像
     user.avatar_url = avatar_url
     db.add(user)
     await db.flush()
-    
+
     # 获取积分余额
     acc = await get_or_create_account(db, user.id)
-    
+
     user_data = MeOut(
         id=user.uuid,
         email=user.email,
@@ -240,7 +238,7 @@ async def upload_avatar(
     return success_response("头像上传成功", user_data.model_dump())
 
 
-@router.post("/me/avatar")
+@router.post("/me/avatar", response_model=Response[MeOut])
 async def update_avatar(
     payload: UpdateAvatarIn,
     db: AsyncSession = Depends(get_db),
@@ -250,7 +248,7 @@ async def update_avatar(
     user.avatar_url = payload.avatar_url
     db.add(user)
     await db.flush()
-    
+
     # 获取积分余额
     acc = await get_or_create_account(db, user.id)
 
@@ -269,7 +267,7 @@ async def update_avatar(
     return success_response("头像更新成功", user_data.model_dump())
 
 
-@router.post("/me/change-password")
+@router.post("/me/change-password", response_model=Response[None])
 async def change_password(
     payload: ChangePasswordIn,
     db: AsyncSession = Depends(get_db),
@@ -283,7 +281,7 @@ async def change_password(
     return success_response("密码修改成功")
 
 
-@router.get("/subscription")
+@router.get("/subscription", response_model=Response[SubscriptionInfo])
 async def get_subscription(user: User = Depends(require_console_user)):
     """获取当前订阅信息"""
     plan_config = get_plan_config(user.subscription_plan.value)
@@ -306,7 +304,7 @@ async def get_subscription(user: User = Depends(require_console_user)):
     return success_response("获取成功", subscription_data.model_dump())
 
 
-@router.post("/subscription/upgrade")
+@router.post("/subscription/upgrade", response_model=Response[dict])
 async def upgrade_subscription(
     payload: UpgradeSubscriptionIn,
     db: AsyncSession = Depends(get_db),
@@ -356,7 +354,7 @@ async def upgrade_subscription(
     )
 
 
-@router.get("/dashboard")
+@router.get("/dashboard", response_model=Response[DashboardOut])
 async def get_dashboard(
     db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
 ):
@@ -420,7 +418,7 @@ async def get_dashboard(
     return success_response("获取成功", dashboard_data.model_dump())
 
 
-@router.get("/api-keys")
+@router.get("/api-keys", response_model=Response[list[ApiKeyListItem]])
 async def list_api_keys(
     db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
 ):
@@ -455,7 +453,7 @@ async def list_api_keys(
     return success_response("获取成功", api_keys_data)
 
 
-@router.post("/api-keys")
+@router.post("/api-keys", response_model=Response[ApiKeyOut])
 async def create_api_key(
     payload: CreateApiKeyIn,
     db: AsyncSession = Depends(get_db),
@@ -489,7 +487,7 @@ async def create_api_key(
     return created_response("API Key 创建成功", api_key_data.model_dump())
 
 
-@router.delete("/api-keys/{key_id}")
+@router.delete("/api-keys/{key_id}", response_model=Response[None])
 async def delete_api_key(
     key_id: int,
     db: AsyncSession = Depends(get_db),
@@ -510,7 +508,7 @@ async def delete_api_key(
     return success_response("删除成功")
 
 
-@router.post("/api-keys/rotate")
+@router.post("/api-keys/rotate", response_model=Response[ApiKeyOut])
 async def rotate_api_key(
     payload: CreateApiKeyIn = None,
     db: AsyncSession = Depends(get_db),
@@ -561,7 +559,7 @@ def _mask_api_key(api_key: str) -> str:
     return f"{api_key[:8]}...{api_key[-4:]}"
 
 
-@router.get("/usage-stats")
+@router.get("/usage-stats", response_model=Response[list[UsageStatsOut]])
 async def get_usage_stats(
     days: int = Query(default=7, ge=1, le=90),
     db: AsyncSession = Depends(get_db),
@@ -609,7 +607,7 @@ async def get_usage_stats(
     return success_response("获取成功", results)
 
 
-@router.get("/request-logs")
+@router.get("/request-logs", response_model=Response[PaginatedRequestLogs])
 async def get_request_logs(
     page: int = Query(default=1, ge=1, description="页码，从1开始"),
     page_size: int = Query(default=50, ge=1, le=200, description="每页数量，最多200条"),
@@ -671,7 +669,7 @@ async def get_request_logs(
     return success_response("获取成功", pagination_data.model_dump())
 
 
-@router.get("/credits")
+@router.get("/credits", response_model=Response[CreditAccountOut])
 async def credits(
     db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
 ):
@@ -681,7 +679,7 @@ async def credits(
     return success_response("获取成功", credit_data.model_dump())
 
 
-@router.get("/credits/transactions")
+@router.get("/credits/transactions", response_model=Response[list[CreditTxOut]])
 async def credit_transactions(
     db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
 ):
@@ -716,7 +714,7 @@ async def credit_transactions(
     return success_response("获取成功", transactions_data)
 
 
-@router.post("/admin/credits/recharge")
+@router.post("/admin/credits/recharge", response_model=Response[dict])
 async def recharge_credits(
     payload: RechargeIn,
     db: AsyncSession = Depends(get_db),

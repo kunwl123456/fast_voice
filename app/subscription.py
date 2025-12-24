@@ -10,6 +10,7 @@ from dataclasses import dataclass
 @dataclass
 class PlanConfig:
     """订阅计划配置"""
+
     name: str  # 计划名称
     monthly_credits: int  # 每月赠送积分
     monthly_quota: int  # 月度请求配额
@@ -67,4 +68,3 @@ def get_plan_features(plan: str) -> dict:
         "commercial_use": config.commercial_use,
         "priority_support": config.priority_support,
     }
-

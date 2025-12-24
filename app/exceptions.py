@@ -4,3 +4,7 @@ class AuthenticationException(Exception):
 
 class PermissionException(Exception):
     """权限错误"""
+
+
+class NotFoundException(Exception):
+    """未找到"""
