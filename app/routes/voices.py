@@ -22,7 +22,9 @@ def _voice_out(v: Voice) -> VoiceOut:
     return VoiceOut(
         id=v.uuid,  # 返回 UUID 而不是数字 ID
         name=v.name,
+        avatar_url=v.avatar_url,
         description=v.description,
+        tags=v.tags or [],
         is_public=v.is_public,
         preview_audio_url=(
             to_public_file_url(v.preview_audio_path) if v.preview_audio_path else ""

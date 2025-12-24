@@ -187,7 +187,9 @@ class Voice(Base):
         ForeignKey("users.id"), index=True
     )  # 拥有者（用户）
     name: Mapped[str] = mapped_column(String(120))  # 音色名称
-    description: Mapped[str] = mapped_column(String(255), default="")  # 描述
+    avatar_url: Mapped[str] = mapped_column(String(512), default="")  # 音色头像
+    description: Mapped[str] = mapped_column(String(500), default="")  # 描述
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)  # 标签列表
     is_public: Mapped[bool] = mapped_column(
         Boolean, default=False, index=True
     )  # 是否公开
@@ -264,7 +266,11 @@ class CloneJob(Base):
         ForeignKey("users.id"), index=True
     )  # 调用方（用户）
     voice_name: Mapped[str] = mapped_column(String(120))  # 目标音色名
+    avatar_url: Mapped[str] = mapped_column(String(512), default="")  # 音频特征头像
+    description: Mapped[str] = mapped_column(String(500), default="")  # 音频特征描述
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)  # 标签列表
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)  # 产出音色是否公开
+    remove_background_noise: Mapped[bool] = mapped_column(Boolean, default=False)  # 是否去除背景音
     status: Mapped[JobStatus] = mapped_column(
         Enum(JobStatus, name="job_status"), default=JobStatus.queued, index=True
     )

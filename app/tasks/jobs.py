@@ -190,6 +190,9 @@ def run_clone_job(job_id: int) -> None:
             dataset_dir = job.dataset_dir or ""
             user_id = job.user_id
             voice_name = job.voice_name
+            avatar_url = job.avatar_url
+            description = job.description
+            tags = job.tags or []
             is_public = job.is_public
             job_uuid = job.uuid  # 使用克隆任务的 UUID 作为音频特征 ID
 
@@ -217,7 +220,9 @@ def run_clone_job(job_id: int) -> None:
             v = Voice(
                 owner_user_id=job.user_id,
                 name=job.voice_name,
-                description="",
+                avatar_url=job.avatar_url,
+                description=job.description,
+                tags=job.tags or [],
                 is_public=job.is_public,
                 preview_audio_path="",
                 clone_job_uuid=job.uuid,  # 保存克隆任务的 UUID

@@ -21,7 +21,7 @@ from app.responses import (
 from app.schemas import CloneCreateOut, CloneJobOut
 from app.services.idempotency import get_idempotency, set_idempotency
 from app.services.kv import KV
-from app.services.storage import job_dir, save_bytes
+from app.services.storage import job_dir, save_bytes, to_public_file_url
 from app.tasks.jobs import run_clone_job
 
 console_router = APIRouter(prefix="/console", tags=["console-clone"])
@@ -29,22 +29,50 @@ openapi_router = APIRouter(prefix="/openapi", tags=["openapi-clone"])
 
 
 def _clone_out(job: CloneJob) -> CloneJobOut:
+    # 构建预览音频URL
+    preview_url = ""
+    if job.result_voice_uuid and job.dataset_dir:
+        # 预览音频路径通常在 clone 输出目录下
+        preview_path = os.path.join(
+            job_dir("clone", user_id=job.user_id, job_uuid=job.uuid), 
+            "preview.wav"
+        )
+        if os.path.exists(preview_path):
+            preview_url = to_public_file_url(preview_path)
+    
     return CloneJobOut(
         id=job.uuid,
         status=job.status.value,
         error=job.error or "",
         voice_name=job.voice_name,
+        avatar_url=job.avatar_url,
+        description=job.description,
+        tags=job.tags or [],
+        user_id=job.user_id,
+        created_at=job.created_at.isoformat(),
+        preview_audio_url=preview_url,
         result_voice_uuid=job.result_voice_uuid,
     )
 
 
 async def _create_clone_job(
-    db: AsyncSession, user_id: int, voice_name: str, is_public: bool
+    db: AsyncSession, 
+    user_id: int, 
+    voice_name: str, 
+    avatar_url: str,
+    description: str,
+    tags: list[str],
+    is_public: bool,
+    remove_background_noise: bool
 ) -> CloneJob:
     job = CloneJob(
         user_id=user_id,
         voice_name=voice_name,
+        avatar_url=avatar_url,
+        description=description,
+        tags=tags,
         is_public=is_public,
+        remove_background_noise=remove_background_noise,
         status=JobStatus.queued,
         dataset_dir="",
     )
@@ -56,13 +84,38 @@ async def _create_clone_job(
 @console_router.post("/clone/jobs")
 async def console_create_clone(
     voice_name: str = Form(...),
+    avatar_url: str = Form(""),
+    description: str = Form(""),
+    tags: str = Form("[]"),  # JSON 字符串数组
     is_public: bool = Form(False),
+    remove_background_noise: bool = Form(False),
     files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
-    """创建克隆任务"""
-    job = await _create_clone_job(db, user.id, voice_name, is_public)
+    """创建克隆任务
+    
+    参数:
+    - voice_name: 音频特征名字（必填）
+    - avatar_url: 头像URL（可选）
+    - description: 音频特征描述（可选）
+    - tags: 标签JSON数组字符串，如 '["标签1","标签2"]'（可选）
+    - is_public: 是否公开，默认false（私密）
+    - remove_background_noise: 是否去除背景音，默认false
+    - files: 音频文件列表（必填）
+    """
+    import json
+    
+    # 解析标签
+    try:
+        tags_list = json.loads(tags) if tags else []
+    except json.JSONDecodeError:
+        tags_list = []
+    
+    job = await _create_clone_job(
+        db, user.id, voice_name, avatar_url, description, 
+        tags_list, is_public, remove_background_noise
+    )
     await db.flush()  # 确保 UUID 已生成
     ds_dir = job_dir("clone_dataset", user_id=user.id, job_uuid=job.uuid)
     for f in files:
@@ -83,6 +136,12 @@ async def console_create_clone(
         status=job.status.value,
         error=job.error or "",
         voice_name=job.voice_name,
+        avatar_url=job.avatar_url,
+        description=job.description,
+        tags=job.tags or [],
+        user_id=job.user_id,
+        created_at=job.created_at.isoformat(),
+        preview_audio_url="",  # 创建时还没有预览音频
     )
     return success_response("克隆任务创建成功", clone_data.model_dump())
 
@@ -111,24 +170,54 @@ async def console_get_clone(
 @openapi_router.post("/clone/jobs")
 async def openapi_create_clone(
     voice_name: str = Form(...),
+    avatar_url: str = Form(""),
+    description: str = Form(""),
+    tags: str = Form("[]"),  # JSON 字符串数组
     is_public: bool = Form(False),
+    remove_background_noise: bool = Form(False),
     files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
 ):
-    """通过 OpenAPI 创建克隆任务"""
+    """通过 OpenAPI 创建克隆任务
+    
+    参数:
+    - voice_name: 音频特征名字（必填）
+    - avatar_url: 头像URL（可选）
+    - description: 音频特征描述（可选）
+    - tags: 标签JSON数组字符串，如 '["标签1","标签2"]'（可选）
+    - is_public: 是否公开，默认false（私密）
+    - remove_background_noise: 是否去除背景音，默认false
+    - files: 音频文件列表（必填）
+    """
+    import json
+    
+    # 解析标签
+    try:
+        tags_list = json.loads(tags) if tags else []
+    except json.JSONDecodeError:
+        tags_list = []
+    
     kv = KV.from_settings()
     existed = get_idempotency(
         kv, principal.user.id, "openapi:clone:create", idempotency_key
     )
     if existed:
-        clone_data = CloneCreateOut(
-            id=existed, status="queued", voice_name=voice_name
-        )
-        return success_response("克隆任务已存在（幂等）", clone_data.model_dump())
+        # 幂等返回需要查询任务详情
+        job = (
+            await db.execute(
+                select(CloneJob).where(CloneJob.uuid == existed)
+            )
+        ).scalar_one_or_none()
+        if job:
+            clone_data = _clone_out(job)
+            return success_response("克隆任务已存在（幂等）", clone_data.model_dump())
 
-    job = await _create_clone_job(db, principal.user.id, voice_name, is_public)
+    job = await _create_clone_job(
+        db, principal.user.id, voice_name, avatar_url, description, 
+        tags_list, is_public, remove_background_noise
+    )
     await db.flush()  # 确保 UUID 已生成
     ds_dir = job_dir("clone_dataset", user_id=principal.user.id, job_uuid=job.uuid)
     for f in files:
@@ -153,6 +242,12 @@ async def openapi_create_clone(
         status=job.status.value,
         error=job.error or "",
         voice_name=job.voice_name,
+        avatar_url=job.avatar_url,
+        description=job.description,
+        tags=job.tags or [],
+        user_id=job.user_id,
+        created_at=job.created_at.isoformat(),
+        preview_audio_url="",  # 创建时还没有预览音频
     )
     return success_response("克隆任务创建成功", clone_data.model_dump())
 

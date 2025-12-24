@@ -161,7 +161,9 @@ class UpgradeSubscriptionIn(BaseModel):
 class VoiceOut(BaseModel):
     id: str  # Voice 的 UUID
     name: str
+    avatar_url: str = ""
     description: str
+    tags: list[str] = []
     is_public: bool
     preview_audio_url: str = ""
 
@@ -210,8 +212,20 @@ class TTSJobOut(JobOut):
 
 class CloneCreateOut(JobOut):
     voice_name: str
+    avatar_url: str = ""
+    description: str = ""
+    tags: list[str] = []
+    user_id: int
+    created_at: str
+    preview_audio_url: str = ""
 
 
 class CloneJobOut(JobOut):
     voice_name: str
+    avatar_url: str = ""
+    description: str = ""
+    tags: list[str] = []
+    user_id: int
+    created_at: str
+    preview_audio_url: str = ""
     result_voice_uuid: str | None = None  # 克隆成功后生成的音色 UUID
