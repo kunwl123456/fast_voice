@@ -199,6 +199,15 @@ class Voice(Base):
     clone_job_uuid: Mapped[str] = mapped_column(
         String(36), default="", index=True
     )  # 来源克隆任务的 UUID（用于追溯来源）
+    likes_count: Mapped[int] = mapped_column(
+        Integer, default=0, index=True
+    )  # 点赞数
+    generated_chars_count: Mapped[int] = mapped_column(
+        Integer, default=0
+    )  # 生成字符数（累计）
+    usage_count: Mapped[int] = mapped_column(
+        Integer, default=0, index=True
+    )  # 使用次数（TTS任务成功次数）
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=format_timezone
     )

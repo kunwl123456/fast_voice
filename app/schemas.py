@@ -166,6 +166,10 @@ class VoiceOut(BaseModel):
     tags: list[str] = []
     is_public: bool
     preview_audio_url: str = ""
+    likes_count: int = 0  # 点赞数
+    generated_chars_count: int = 0  # 生成字符数
+    usage_count: int = 0  # 使用次数
+    created_at: str  # 创建时间
 
 
 class VoiceUpdateIn(BaseModel):
@@ -176,9 +180,6 @@ class VoiceUpdateIn(BaseModel):
 class TTSCreatIn(BaseModel):
     clone_job_id: str = Field(..., description="克隆任务的 UUID（/console/clone/jobs 返回的 data.id）")
     text: str
-    tags: list[str] | None = Field(
-        default=None, description="可选标签列表；未提供或为空则使用默认标签"
-    )
     speed_factor: float | None = Field(
         default=None, description="语速，可选；未提供则使用默认值 1.0"
     )

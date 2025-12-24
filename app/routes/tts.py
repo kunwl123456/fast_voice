@@ -34,7 +34,6 @@ from app.deps import (
 
 console_router = APIRouter(prefix="/console", tags=["console-tts"])
 openapi_router = APIRouter(prefix="/openapi", tags=["openapi-tts"])
-DEFAULT_TTS_TAGS = ["default"]
 
 
 def _tts_out(job: TTSJob) -> TTSJobOut:
@@ -109,10 +108,6 @@ async def _create_job(
     if voice.owner_user_id != user_id and not voice.is_public:
         return error_response("无权使用该音色", {"voice_uuid": voice_uuid})
 
-    tags = [t.strip() for t in (payload.tags or []) if t and t.strip()]
-    if not tags:
-        tags = DEFAULT_TTS_TAGS
-
     speed_factor = payload.speed_factor if payload.speed_factor is not None else 1.0
     temperature = payload.temperature if payload.temperature is not None else 1.0
     top_k = payload.top_k if payload.top_k is not None else 5
@@ -125,7 +120,7 @@ async def _create_job(
         text=payload.text,
         text_utf8_bytes=b,
         cost_credits=cost,
-        tags=tags,
+        tags=voice.tags or [],  # 使用音色的标签
         speed_factor=speed_factor,
         temperature=temperature,
         top_k=top_k,

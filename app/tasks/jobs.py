@@ -131,6 +131,14 @@ def run_tts_job(job_id: int) -> None:
             job.status = JobStatus.succeeded
             job.output_audio_path = out_path
             job.updated_at = format_timezone()
+            
+            # 更新 Voice 统计数据：使用次数 +1，生成字符数累加
+            voice = db.execute(select(Voice).where(Voice.uuid == job.voice_uuid)).scalar_one_or_none()
+            if voice:
+                voice.usage_count += 1
+                voice.generated_chars_count += len(job.text)
+                db.add(voice)
+            
             db.commit()
         
         # 调用 webhook 回调（成功）

@@ -29,6 +29,10 @@ def _voice_out(v: Voice) -> VoiceOut:
         preview_audio_url=(
             to_public_file_url(v.preview_audio_path) if v.preview_audio_path else ""
         ),
+        likes_count=v.likes_count,
+        generated_chars_count=v.generated_chars_count,
+        usage_count=v.usage_count,
+        created_at=v.created_at.isoformat(),
     )
 
 
@@ -103,3 +107,54 @@ async def public_voices(db: AsyncSession = Depends(get_db)):
 
     voices_data = [_voice_out(v).model_dump() for v in voices]
     return success_response("获取成功", voices_data)
+
+
+@console_router.post("/voices/{voice_uuid}/like")
+async def like_voice(
+    voice_uuid: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console_user),
+):
+    """点赞音色"""
+    v = (
+        await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
+    ).scalar_one_or_none()
+    if not v:
+        raise HTTPException(
+            status_code=404,
+            detail=not_found_response("音色不存在", {"voice_uuid": voice_uuid}),
+        )
+    
+    # 增加点赞数
+    v.likes_count += 1
+    db.add(v)
+    await db.flush()
+
+    voice_data = _voice_out(v)
+    return success_response("点赞成功", voice_data.model_dump())
+
+
+@console_router.delete("/voices/{voice_uuid}/like")
+async def unlike_voice(
+    voice_uuid: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console_user),
+):
+    """取消点赞音色"""
+    v = (
+        await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
+    ).scalar_one_or_none()
+    if not v:
+        raise HTTPException(
+            status_code=404,
+            detail=not_found_response("音色不存在", {"voice_uuid": voice_uuid}),
+        )
+    
+    # 减少点赞数（但不能小于0）
+    if v.likes_count > 0:
+        v.likes_count -= 1
+    db.add(v)
+    await db.flush()
+
+    voice_data = _voice_out(v)
+    return success_response("取消点赞成功", voice_data.model_dump())
