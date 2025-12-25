@@ -250,6 +250,140 @@ async def openapi_get_tts(
     return success_response("获取成功", tts_data.model_dump())
 
 
+async def _stream_tts_events(job_uuid: str, user_id: int) -> StreamingResponse:
+    """复用的 SSE 推送，支持心跳、超时配置、断连处理。"""
+
+    async def event_generator():
+        from app.db import AsyncSessionLocal  # 导入 session 工厂
+
+        last_status = None
+        start_time = time.time()
+        max_wait_seconds = getattr(settings, "tts_stream_timeout_seconds", 300)
+        heartbeat_seconds = getattr(settings, "tts_stream_heartbeat_seconds", 15)
+        last_heartbeat = start_time
+
+        try:
+            # 创建独立的数据库 session（关键修复）
+            async with AsyncSessionLocal() as db:
+                # 先检查任务是否存在
+                job = (
+                    await db.execute(
+                        select(TTSJob).where(
+                            TTSJob.uuid == job_uuid, TTSJob.user_id == user_id
+                        )
+                    )
+                ).scalar_one_or_none()
+
+                if not job:
+                    yield f"event: error\ndata: {json.dumps({'message': '任务不存在', 'code': 'not_found'})}\n\n"
+                    return
+
+                # 推送初始状态
+                last_status = job.status
+                status_data = {
+                    "job_id": job.uuid,
+                    "status": job.status.value,
+                    "timestamp": time.time(),
+                }
+                yield f"event: status\ndata: {json.dumps(status_data)}\n\n"
+
+            # 如果任务已完成，直接返回
+            if last_status in [JobStatus.succeeded, JobStatus.failed]:
+                async with AsyncSessionLocal() as db:
+                    job = (
+                        await db.execute(select(TTSJob).where(TTSJob.uuid == job_uuid))
+                    ).scalar_one()
+                    tts_data = _tts_out(job)
+                    complete_data = {
+                        "job_id": job.uuid,
+                        "status": job.status.value,
+                        "data": tts_data.model_dump(),
+                    }
+                    yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
+                return
+
+            # 循环检查状态
+            while True:
+                # 检查超时
+                if time.time() - start_time > max_wait_seconds:
+                    yield f"event: timeout\ndata: {json.dumps({'message': '任务处理超时', 'elapsed_seconds': max_wait_seconds})}\n\n"
+                    break
+
+                # 等待 1 秒后再次查询
+                try:
+                    await asyncio.sleep(1)
+                except asyncio.CancelledError:
+                    return
+
+                # 每次查询使用新的 session
+                try:
+                    async with AsyncSessionLocal() as db:
+                        job = (
+                            await db.execute(
+                                select(TTSJob).where(
+                                    TTSJob.uuid == job_uuid, TTSJob.user_id == user_id
+                                )
+                            )
+                        ).scalar_one_or_none()
+                except asyncio.CancelledError:
+                    return
+
+                if not job:
+                    yield f"event: error\ndata: {json.dumps({'message': '任务已被删除', 'code': 'deleted'})}\n\n"
+                    break
+
+                # 状态变化时推送
+                if job.status != last_status:
+                    status_data = {
+                        "job_id": job.uuid,
+                        "status": job.status.value,
+                        "timestamp": time.time(),
+                    }
+                    yield f"event: status\ndata: {json.dumps(status_data)}\n\n"
+                    last_status = job.status
+                    last_heartbeat = time.time()
+
+                # 心跳，防止链路空闲被断开
+                if time.time() - last_heartbeat >= heartbeat_seconds:
+                    heartbeat_data = {
+                        "job_id": job.uuid,
+                        "status": job.status.value,
+                        "timestamp": time.time(),
+                    }
+                    yield f"event: ping\ndata: {json.dumps(heartbeat_data)}\n\n"
+                    last_heartbeat = time.time()
+
+                # 任务完成时推送完整信息
+                if job.status in [JobStatus.succeeded, JobStatus.failed]:
+                    tts_data = _tts_out(job)
+                    complete_data = {
+                        "job_id": job.uuid,
+                        "status": job.status.value,
+                        "data": tts_data.model_dump(),
+                    }
+                    yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
+                    break
+
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            import traceback
+
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            traceback.print_exc()  # 打印到服务器日志
+            yield f"event: error\ndata: {json.dumps({'message': error_msg})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲
+        },
+    )
+
+
 @console_router.get("/tts/jobs/{job_uuid}/events")
 async def console_stream_tts_events(
     job_uuid: str,
@@ -264,117 +398,7 @@ async def console_stream_tts_events(
     - event: error - 错误事件
     - event: timeout - 超时事件
     """
-
-    async def event_generator():
-        from app.db import AsyncSessionLocal  # 导入 session 工厂
-
-        last_status = None
-        start_time = time.time()
-        max_wait_seconds = 300  # 最多等待 5 分钟
-        user_id = user.id  # 保存 user_id
-
-        try:
-            # 创建独立的数据库 session（关键修复）
-            async with AsyncSessionLocal() as db:
-                # 先检查任务是否存在
-                job = (
-                    await db.execute(
-                        select(TTSJob).where(
-                            TTSJob.uuid == job_uuid, TTSJob.user_id == user_id
-                        )
-                    )
-                ).scalar_one_or_none()
-
-                if not job:
-                    yield f"event: error\ndata: {json.dumps({'message': '任务不存在'})}\n\n"
-                    return
-
-                # 推送初始状态
-                last_status = job.status
-                status_data = {
-                    "job_id": job.uuid,
-                    "status": job.status.value,
-                    "timestamp": time.time(),
-                }
-                yield f"event: status\ndata: {json.dumps(status_data)}\n\n"
-
-            # 如果任务已完成，直接返回
-            if last_status in [JobStatus.succeeded, JobStatus.failed]:
-                async with AsyncSessionLocal() as db:
-                    job = (
-                        await db.execute(select(TTSJob).where(TTSJob.uuid == job_uuid))
-                    ).scalar_one()
-                    tts_data = _tts_out(job)
-                    complete_data = {
-                        "job_id": job.uuid,
-                        "status": job.status.value,
-                        "data": tts_data.model_dump(),
-                    }
-                    yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
-                return
-
-            # 循环检查状态
-            while True:
-                # 检查超时
-                if time.time() - start_time > max_wait_seconds:
-                    yield f"event: timeout\ndata: {json.dumps({'message': '任务处理超时', 'elapsed_seconds': max_wait_seconds})}\n\n"
-                    break
-
-                # 等待 1 秒后再次查询
-                await asyncio.sleep(1)
-
-                # 每次查询使用新的 session
-                async with AsyncSessionLocal() as db:
-                    # 查询任务状态
-                    job = (
-                        await db.execute(
-                            select(TTSJob).where(
-                                TTSJob.uuid == job_uuid, TTSJob.user_id == user_id
-                            )
-                        )
-                    ).scalar_one_or_none()
-
-                    if not job:
-                        yield f"event: error\ndata: {json.dumps({'message': '任务已被删除'})}\n\n"
-                        break
-
-                    # 状态变化时推送
-                    if job.status != last_status:
-                        status_data = {
-                            "job_id": job.uuid,
-                            "status": job.status.value,
-                            "timestamp": time.time(),
-                        }
-                        yield f"event: status\ndata: {json.dumps(status_data)}\n\n"
-                        last_status = job.status
-
-                    # 任务完成时推送完整信息
-                    if job.status in [JobStatus.succeeded, JobStatus.failed]:
-                        tts_data = _tts_out(job)
-                        complete_data = {
-                            "job_id": job.uuid,
-                            "status": job.status.value,
-                            "data": tts_data.model_dump(),
-                        }
-                        yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
-                        break
-
-        except Exception as e:
-            import traceback
-
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            traceback.print_exc()  # 打印到服务器日志
-            yield f"event: error\ndata: {json.dumps({'message': error_msg})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲
-        },
-    )
+    return await _stream_tts_events(job_uuid, user.id)
 
 
 @openapi_router.get("/tts/jobs/{job_uuid}/events")
@@ -382,122 +406,5 @@ async def openapi_stream_tts_events(
     job_uuid: str,
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
 ):
-    """通过 SSE 流式推送 TTS 任务状态更新
-
-    返回格式：
-    - event: status - 状态变化事件
-    - event: complete - 任务完成事件（成功或失败）
-    - event: error - 错误事件
-    - event: timeout - 超时事件
-    """
-
-    async def event_generator():
-        from app.db import AsyncSessionLocal  # 导入 session 工厂
-
-        last_status = None
-        start_time = time.time()
-        max_wait_seconds = 300  # 最多等待 5 分钟
-        user_id = principal.user.id  # 保存 user_id
-
-        try:
-            # 创建独立的数据库 session（关键修复）
-            async with AsyncSessionLocal() as db:
-                # 先检查任务是否存在
-                job = (
-                    await db.execute(
-                        select(TTSJob).where(
-                            TTSJob.uuid == job_uuid, TTSJob.user_id == user_id
-                        )
-                    )
-                ).scalar_one_or_none()
-
-                if not job:
-                    yield f"event: error\ndata: {json.dumps({'message': '任务不存在'})}\n\n"
-                    return
-
-                # 推送初始状态
-                last_status = job.status
-                status_data = {
-                    "job_id": job.uuid,
-                    "status": job.status.value,
-                    "timestamp": time.time(),
-                }
-                yield f"event: status\ndata: {json.dumps(status_data)}\n\n"
-
-            # 如果任务已完成，直接返回
-            if last_status in [JobStatus.succeeded, JobStatus.failed]:
-                async with AsyncSessionLocal() as db:
-                    job = (
-                        await db.execute(select(TTSJob).where(TTSJob.uuid == job_uuid))
-                    ).scalar_one()
-                    tts_data = _tts_out(job)
-                    complete_data = {
-                        "job_id": job.uuid,
-                        "status": job.status.value,
-                        "data": tts_data.model_dump(),
-                    }
-                    yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
-                return
-
-            # 循环检查状态
-            while True:
-                # 检查超时
-                if time.time() - start_time > max_wait_seconds:
-                    yield f"event: timeout\ndata: {json.dumps({'message': '任务处理超时', 'elapsed_seconds': max_wait_seconds})}\n\n"
-                    break
-
-                # 等待 1 秒后再次查询
-                await asyncio.sleep(1)
-
-                # 每次查询使用新的 session
-                async with AsyncSessionLocal() as db:
-                    # 查询任务状态
-                    job = (
-                        await db.execute(
-                            select(TTSJob).where(
-                                TTSJob.uuid == job_uuid, TTSJob.user_id == user_id
-                            )
-                        )
-                    ).scalar_one_or_none()
-
-                    if not job:
-                        yield f"event: error\ndata: {json.dumps({'message': '任务已被删除'})}\n\n"
-                        break
-
-                    # 状态变化时推送
-                    if job.status != last_status:
-                        status_data = {
-                            "job_id": job.uuid,
-                            "status": job.status.value,
-                            "timestamp": time.time(),
-                        }
-                        yield f"event: status\ndata: {json.dumps(status_data)}\n\n"
-                        last_status = job.status
-
-                    # 任务完成时推送完整信息
-                    if job.status in [JobStatus.succeeded, JobStatus.failed]:
-                        tts_data = _tts_out(job)
-                        complete_data = {
-                            "job_id": job.uuid,
-                            "status": job.status.value,
-                            "data": tts_data.model_dump(),
-                        }
-                        yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
-                        break
-
-        except Exception as e:
-            import traceback
-
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            traceback.print_exc()  # 打印到服务器日志
-            yield f"event: error\ndata: {json.dumps({'message': error_msg})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲
-        },
-    )
+    """通过 SSE 流式推送 TTS 任务状态更新"""
+    return await _stream_tts_events(job_uuid, principal.user.id)
