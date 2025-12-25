@@ -4,7 +4,7 @@
 HTTP 状态码通过响应头返回，不在 body 中重复
 """
 
-from typing import Any, Optional
+from typing import Any
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -55,7 +55,7 @@ def success_response(
     )
 
 
-def error_response(
+def _error_response(
     message: str = "操作失败", data: Any = None, status_code: int = 400
 ) -> JSONResponse:
     """
@@ -70,7 +70,7 @@ def error_response(
         JSONResponse
 
     Example:
-        >>> return error_response("用户名已存在", {"field": "username"}, 409)
+        >>> return _error_response("用户名已存在", {"field": "username"}, 409)
         HTTP/1.1 409 Conflict
         {
             "message": "用户名已存在",
@@ -191,7 +191,7 @@ def not_found_response(message: str = "资源不存在", data: Any = None) -> JS
     Returns:
         JSONResponse
     """
-    return error_response(message, data, status_code=404)
+    return _error_response(message, data, status_code=404)
 
 
 def unauthorized_response(message: str = "未授权", data: Any = None) -> JSONResponse:
@@ -205,7 +205,7 @@ def unauthorized_response(message: str = "未授权", data: Any = None) -> JSONR
     Returns:
         JSONResponse
     """
-    return error_response(message, data, status_code=401)
+    return _error_response(message, data, status_code=401)
 
 
 def forbidden_response(message: str = "无权限", data: Any = None) -> JSONResponse:
@@ -219,39 +219,7 @@ def forbidden_response(message: str = "无权限", data: Any = None) -> JSONResp
     Returns:
         JSONResponse
     """
-    return error_response(message, data, status_code=403)
-
-
-def validation_error_response(
-    message: str = "参数验证失败", errors: Optional[dict] = None
-) -> JSONResponse:
-    """
-    参数验证错误响应 (HTTP 422)
-
-    Args:
-        message: 错误消息
-        errors: 验证错误详情
-
-    Returns:
-        JSONResponse
-
-    Example:
-        >>> return validation_error_response("参数验证失败", {
-        ...     "email": "邮箱格式不正确",
-        ...     "password": "密码长度不足"
-        ... })
-        HTTP/1.1 422 Unprocessable Entity
-        {
-            "message": "参数验证失败",
-            "data": {
-                "errors": {
-                    "email": "邮箱格式不正确",
-                    "password": "密码长度不足"
-                }
-            }
-        }
-    """
-    return error_response(message, {"errors": errors or {}}, status_code=422)
+    return _error_response(message, data, status_code=403)
 
 
 def server_error_response(
@@ -267,7 +235,7 @@ def server_error_response(
     Returns:
         JSONResponse
     """
-    return error_response(message, data, status_code=500)
+    return _error_response(message, data, status_code=500)
 
 
 def conflict_response(message: str = "资源冲突", data: Any = None) -> JSONResponse:
@@ -289,7 +257,7 @@ def conflict_response(message: str = "资源冲突", data: Any = None) -> JSONRe
             "data": {"email": "test@example.com"}
         }
     """
-    return error_response(message, data, status_code=409)
+    return _error_response(message, data, status_code=409)
 
 
 def bad_request_response(
@@ -305,4 +273,4 @@ def bad_request_response(
     Returns:
         JSONResponse
     """
-    return error_response(message, data, status_code=400)
+    return _error_response(message, data, status_code=400)

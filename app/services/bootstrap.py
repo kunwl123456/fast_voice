@@ -17,23 +17,23 @@ async def bootstrap_admin(db: AsyncSession) -> None:
     admin = (
         await db.execute(select(User).where(User.email == settings.admin_email))
     ).scalar_one_or_none()
-    
+
     if admin:
         # 管理员已存在，更新密码、头像等信息（确保与配置一致）
         print(f"ℹ️  管理员账号已存在：{settings.admin_email}")
-        
+
         # 更新密码（每次启动时同步配置文件中的密码）
         new_password_hash = hash_password(settings.admin_password)
         if admin.password_hash != new_password_hash:
             admin.password_hash = new_password_hash
             print("   - 密码已更新")
-        
+
         # 更新其他信息
         admin.display_name = "AutoGame"
         admin.avatar_url = "/files/static/avatars/autogame_icon.jpg"
         admin.is_admin = True
         admin.subscription_plan = SubscriptionPlan.enterprise
-        
+
         db.add(admin)
         await db.commit()
         print("   - 账号信息已同步")

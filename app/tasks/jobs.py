@@ -4,7 +4,6 @@ import os
 import wave
 from pathlib import Path
 import requests
-import uuid
 import shutil
 
 from celery.utils.log import get_task_logger
@@ -41,15 +40,24 @@ def _call_webhook(webhook_url: str, payload: dict) -> None:
             webhook_url,
             json=payload,
             timeout=10,
-            headers={"Content-Type": "application/json", "User-Agent": "FastVoice-Webhook/1.0"}
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "FastVoice-Webhook/1.0",
+            },
         )
         if resp.status_code >= 400:
             logger.warning(
                 "webhook call returned error: url=%s status=%s body=%s",
-                webhook_url, resp.status_code, resp.text[:200]
+                webhook_url,
+                resp.status_code,
+                resp.text[:200],
             )
         else:
-            logger.info("webhook called successfully: url=%s status=%s", webhook_url, resp.status_code)
+            logger.info(
+                "webhook called successfully: url=%s status=%s",
+                webhook_url,
+                resp.status_code,
+            )
     except Exception as e:
         logger.warning("webhook call failed: url=%s error=%s", webhook_url, e)
 
@@ -84,12 +92,18 @@ def run_tts_job(job_id: int) -> None:
         used_fallback = False
         clone_uuid: str | None = None
         with SessionLocalSync() as db:
-            voice = db.execute(select(Voice).where(Voice.uuid == voice_uuid)).scalar_one_or_none()
+            voice = db.execute(
+                select(Voice).where(Voice.uuid == voice_uuid)
+            ).scalar_one_or_none()
             if voice and voice.clone_job_uuid:
                 clone_uuid = voice.clone_job_uuid
-                logger.info("Found voice uuid=%s, clone_job_uuid=%s", voice_uuid, clone_uuid)
+                logger.info(
+                    "Found voice uuid=%s, clone_job_uuid=%s", voice_uuid, clone_uuid
+                )
             else:
-                logger.warning("Voice uuid=%s not found or missing clone_job_uuid", voice_uuid)
+                logger.warning(
+                    "Voice uuid=%s not found or missing clone_job_uuid", voice_uuid
+                )
 
         logger.info("TTS config: base_url=%s, clone_uuid=%s", base_url, clone_uuid)
         if base_url and clone_uuid:
@@ -131,33 +145,41 @@ def run_tts_job(job_id: int) -> None:
             job.status = JobStatus.succeeded
             job.output_audio_path = out_path
             job.updated_at = format_timezone()
-            
+
             # 更新 Voice 统计数据：使用次数 +1，生成字符数累加
-            voice = db.execute(select(Voice).where(Voice.uuid == job.voice_uuid)).scalar_one_or_none()
+            voice = db.execute(
+                select(Voice).where(Voice.uuid == job.voice_uuid)
+            ).scalar_one_or_none()
             if voice:
                 voice.usage_count += 1
                 voice.generated_chars_count += len(job.text)
                 db.add(voice)
-            
+
             db.commit()
-        
+
         # 调用 webhook 回调（成功）
         if webhook_url:
             from app.services.storage import to_public_file_url
-            _call_webhook(webhook_url, {
-                "job_id": job_uuid,
-                "status": "succeeded",
-                "output_audio_url": to_public_file_url(out_path),
-                "cost_credits": job.cost_credits,
-                "timestamp": format_timezone().isoformat()
-            })
-        
+
+            _call_webhook(
+                webhook_url,
+                {
+                    "job_id": job_uuid,
+                    "status": "succeeded",
+                    "output_audio_url": to_public_file_url(out_path),
+                    "cost_credits": job.cost_credits,
+                    "timestamp": format_timezone().isoformat(),
+                },
+            )
+
         if used_fallback:
             logger.info("tts job %s used fallback audio", job_id)
     except Exception as e:
         logger.exception("tts job failed: %s", e)
         with SessionLocalSync() as db:
-            job = db.execute(select(TTSJob).where(TTSJob.id == job_id)).scalar_one_or_none()
+            job = db.execute(
+                select(TTSJob).where(TTSJob.id == job_id)
+            ).scalar_one_or_none()
             if not job:
                 return
             job.status = JobStatus.failed
@@ -166,24 +188,35 @@ def run_tts_job(job_id: int) -> None:
             webhook_url_failed = job.webhook_url or ""
             job_uuid_failed = job.uuid
             # refund 需要从数据库读取最新的 cost_credits
-            refund(db=db, user_id=job.user_id, amount=job.cost_credits, ref_type="tts", ref_id=str(job.id))
+            refund(
+                db=db,
+                user_id=job.user_id,
+                amount=job.cost_credits,
+                ref_type="tts",
+                ref_id=str(job.id),
+            )
             db.commit()
-        
+
         # 调用 webhook 回调（失败）
         if webhook_url_failed:
-            _call_webhook(webhook_url_failed, {
-                "job_id": job_uuid_failed,
-                "status": "failed",
-                "error": "tts_failed",
-                "error_message": str(e),
-                "timestamp": format_timezone().isoformat()
-            })
+            _call_webhook(
+                webhook_url_failed,
+                {
+                    "job_id": job_uuid_failed,
+                    "status": "failed",
+                    "error": "tts_failed",
+                    "error_message": str(e),
+                    "timestamp": format_timezone().isoformat(),
+                },
+            )
 
 
 @celery_app.task(name="app.tasks.jobs.run_clone_job")
 def run_clone_job(job_id: int) -> None:
     with SessionLocalSync() as db:
-        job = db.execute(select(CloneJob).where(CloneJob.id == job_id)).scalar_one_or_none()
+        job = db.execute(
+            select(CloneJob).where(CloneJob.id == job_id)
+        ).scalar_one_or_none()
         if not job:
             return
         job.status = JobStatus.running
@@ -204,7 +237,9 @@ def run_clone_job(job_id: int) -> None:
             is_public = job.is_public
             job_uuid = job.uuid  # 使用克隆任务的 UUID 作为音频特征 ID
 
-        selected_audio_path = next((p for p in Path(dataset_dir).glob("**/*") if p.is_file()), None)
+        selected_audio_path = next(
+            (p for p in Path(dataset_dir).glob("**/*") if p.is_file()), None
+        )
         if not selected_audio_path:
             raise RuntimeError(f"未找到可用音频文件，目录: {dataset_dir}")
 
@@ -214,11 +249,19 @@ def run_clone_job(job_id: int) -> None:
                 resp = requests.post(
                     f"{base_url}/create_voice",
                     data={"id": job_uuid},  # 使用克隆任务的 UUID
-                    files={"file": (selected_audio_path.name, open(selected_audio_path, "rb"), "audio/wav")},
+                    files={
+                        "file": (
+                            selected_audio_path.name,
+                            open(selected_audio_path, "rb"),
+                            "audio/wav",
+                        )
+                    },
                     timeout=300,
                 )
                 if resp.status_code != 200:
-                    logger.warning("voice svc non-200 code=%s body=%s", resp.status_code, resp.text)
+                    logger.warning(
+                        "voice svc non-200 code=%s body=%s", resp.status_code, resp.text
+                    )
             except Exception as svc_err:
                 logger.warning("voice svc call failed: %s", svc_err)
 
@@ -242,20 +285,21 @@ def run_clone_job(job_id: int) -> None:
             shutil.copyfile(selected_audio_path, preview_path)
             v.preview_audio_path = preview_path
             job.result_voice_uuid = v.uuid  # 保存生成的音色 UUID
-            job.external_request_id = job.uuid  # 使用克隆任务的 UUID 作为 external_request_id
+            job.external_request_id = (
+                job.uuid
+            )  # 使用克隆任务的 UUID 作为 external_request_id
             job.status = JobStatus.succeeded
             job.updated_at = format_timezone()
             db.commit()
     except Exception as e:
         logger.exception("clone job failed: %s", e)
         with SessionLocalSync() as db:
-            job = db.execute(select(CloneJob).where(CloneJob.id == job_id)).scalar_one_or_none()
+            job = db.execute(
+                select(CloneJob).where(CloneJob.id == job_id)
+            ).scalar_one_or_none()
             if not job:
                 return
             job.status = JobStatus.failed
             job.error = "clone_failed"
             job.updated_at = format_timezone()
             db.commit()
-
-
-

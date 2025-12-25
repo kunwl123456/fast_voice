@@ -11,31 +11,28 @@ from fastapi import APIRouter, Depends, Header, Request
 
 from app.responses import (
     success_response,
-    error_response,
     not_found_response,
     bad_request_response,
+    forbidden_response,
 )
 from app.services.kv import KV
 from app.core.config import settings
 from app.tasks.jobs import run_tts_job
-from app.models import JobStatus, TTSJob, User, CloneJob, Voice
 from app.services.storage import to_public_file_url
+from app.models import JobStatus, TTSJob, User, CloneJob, Voice
 from app.schemas import JobOut, TTSJobOut, TTSCreatIn, Response
 from app.services.idempotency import get_idempotency, set_idempotency
 from app.services.billing import calc_cost, ensure_sufficient_and_consume, utf8_bytes
 from app.deps import (
-    OpenAPIPrincipal,
     get_db,
+    OpenAPIPrincipal,
     require_console_user,
     require_openapi_principal,
 )
 
 
-console_router = APIRouter(prefix="/console", tags=["console-tts"])
-openapi_router = APIRouter(
-    prefix="/openapi",
-    tags=["openapi-tts"],
-)
+console_router = APIRouter(prefix="/console", tags=["TTS"])
+openapi_router = APIRouter(prefix="/openapi", tags=["TTS"])
 
 
 def _tts_out(job: TTSJob) -> TTSJobOut:
@@ -93,7 +90,7 @@ async def _create_job(
         )
 
     if not clone_job.result_voice_uuid:
-        return error_response(
+        return bad_request_response(
             "克隆任务异常：未生成音色 UUID",
             {"clone_job_id": payload.clone_job_id},
         )
@@ -110,7 +107,7 @@ async def _create_job(
         return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
 
     if voice.owner_user_id != user_id and not voice.is_public:
-        return error_response("无权使用该音色", {"voice_uuid": voice_uuid})
+        return forbidden_response("无权使用该音色", {"voice_uuid": voice_uuid})
 
     speed_factor = payload.speed_factor if payload.speed_factor is not None else 1.0
     temperature = payload.temperature if payload.temperature is not None else 1.0
@@ -141,18 +138,19 @@ async def _create_job(
             db=db, user_id=user_id, amount=cost, ref_type="tts", ref_id=str(job.id)
         )
     except ValueError as e:
-        return error_response("积分不足", {"required": cost, "error": str(e)})
+        return bad_request_response("积分不足", {"required": cost, "error": str(e)})
 
     return job
 
 
-@console_router.post("/tts/jobs", response_model=Response[JobOut])
+@console_router.post(
+    "/tts/jobs", summary="创建 TTS 任务", response_model=Response[JobOut]
+)
 async def console_create_tts(
     payload: TTSCreatIn,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
-    """创建 TTS 任务"""
     result = await _create_job(db, user.id, payload)
     if not isinstance(result, TTSJob):
         return result  # 返回错误响应
@@ -171,13 +169,16 @@ async def console_create_tts(
     return success_response("TTS 任务创建成功", job_data.model_dump())
 
 
-@console_router.get("/tts/jobs/{job_uuid}", response_model=Response[TTSJobOut])
+@console_router.get(
+    "/tts/jobs/{job_uuid}",
+    summary="获取 TTS 任务详情",
+    response_model=Response[TTSJobOut],
+)
 async def console_get_tts(
     job_uuid: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
-    """获取 TTS 任务详情"""
     job = (
         await db.execute(
             select(TTSJob).where(TTSJob.uuid == job_uuid, TTSJob.user_id == user.id)
@@ -190,7 +191,9 @@ async def console_get_tts(
     return success_response("获取成功", tts_data.model_dump())
 
 
-@openapi_router.post("/tts/jobs", response_model=Response[JobOut])
+@openapi_router.post(
+    "/tts/jobs", summary="创建 TTS 任务", response_model=Response[JobOut]
+)
 async def openapi_create_tts(
     payload: TTSCreatIn,
     request: Request,
@@ -198,7 +201,6 @@ async def openapi_create_tts(
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
-    """创建 TTS 任务"""
     kv = KV.from_settings()
     existed = get_idempotency(
         kv, principal.user.id, "openapi:tts:create", idempotency_key
@@ -229,13 +231,16 @@ async def openapi_create_tts(
     return success_response("TTS 任务创建成功", job_data.model_dump())
 
 
-@openapi_router.get("/tts/jobs/{job_uuid}", response_model=Response[TTSJobOut])
+@openapi_router.get(
+    "/tts/jobs/{job_uuid}",
+    summary="获取 TTS 任务详情",
+    response_model=Response[TTSJobOut],
+)
 async def openapi_get_tts(
     job_uuid: str,
     db: AsyncSession = Depends(get_db),
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
 ):
-    """获取 TTS 任务详情"""
     job = (
         await db.execute(
             select(TTSJob).where(
@@ -384,27 +389,21 @@ async def _stream_tts_events(job_uuid: str, user_id: int) -> StreamingResponse:
     )
 
 
-@console_router.get("/tts/jobs/{job_uuid}/events")
+@console_router.get(
+    "/tts/jobs/{job_uuid}/events", summary="SSE 流式推送 TTS 任务状态更新"
+)
 async def console_stream_tts_events(
     job_uuid: str,
     user: User = Depends(require_console_user),
 ):
-    """
-    通过 SSE 流式推送 TTS 任务状态更新
-
-    返回格式：
-    - event: status - 状态变化事件
-    - event: complete - 任务完成事件（成功或失败）
-    - event: error - 错误事件
-    - event: timeout - 超时事件
-    """
     return await _stream_tts_events(job_uuid, user.id)
 
 
-@openapi_router.get("/tts/jobs/{job_uuid}/events")
+@openapi_router.get(
+    "/tts/jobs/{job_uuid}/events", summary="SSE 流式推送 TTS 任务状态更新"
+)
 async def openapi_stream_tts_events(
     job_uuid: str,
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
 ):
-    """通过 SSE 流式推送 TTS 任务状态更新"""
     return await _stream_tts_events(job_uuid, principal.user.id)

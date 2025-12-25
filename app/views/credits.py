@@ -21,7 +21,7 @@ router = APIRouter(prefix="/console", tags=["积分管理"])
 @router.get(
     "/credits", summary="获取积分余额", response_model=Response[CreditAccountOut]
 )
-async def credits(
+async def get_credits(
     db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
 ):
     """

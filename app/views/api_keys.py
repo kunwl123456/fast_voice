@@ -5,14 +5,15 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models import User
+from app.deps import get_db, require_console_user
+from app.schemas import Response, ApiKeyListItem, ApiKeyOut, CreateApiKeyIn
 from app.responses import (
     success_response,
     created_response,
     forbidden_response,
     not_found_response,
 )
-from app.deps import get_db, require_console_user
-from app.models import User
 from app.controller.api_keys import (
     check_enterprise_permission,
     create_user_api_key,
@@ -20,7 +21,6 @@ from app.controller.api_keys import (
     list_user_api_keys,
     rotate_user_api_key,
 )
-from app.schemas import Response, ApiKeyListItem, ApiKeyOut, CreateApiKeyIn
 
 router = APIRouter(prefix="/console", tags=["API Key 管理"])
 

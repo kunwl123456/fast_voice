@@ -36,8 +36,75 @@ from app.views.voices import openapi_router as voices_openapi_router
 
 
 app = FastAPI(
-    title="fast_voice",
+    title="FastVoice API Document",
     version="0.1.0",
+    description="""
+# API 说明
+
+## 认证方式
+
+### JWT Token 认证（控制台）
+```
+Authorization: Bearer <access_token>
+```
+
+### API Key 认证（企业版 OpenAPI）
+```
+Authorization: Bearer <api_key>
+```
+
+## 响应说明
+
+### 响应格式
+所有接口均返回统一格式：
+```json
+{
+  "message": "提示信息",
+  "data": {} // 响应数据或错误详情
+}
+```
+
+### HTTP 状态码说明
+
+| 状态码 | 说明 | 示例场景 |
+|--------|------|----------|
+| 200 | 请求成功 | 数据查询、更新、删除成功 |
+| 201 | 创建成功 | 资源创建成功 |
+| 400 | 请求参数错误 | 参数错误，例如缺少必需参数、参数格式错误 |
+| 401 | 未授权 | 未登录、token 无效或过期 |
+| 403 | 无权限 | 没有操作权限 |
+| 404 | 资源不存在 | 请求的资源未找到 |
+| 409 | 资源冲突 | 邮箱已注册、资源已存在 |
+| 422 | 参数验证失败 | 字段验证不通过 |
+| 500 | 服务器内部错误 | 系统异常 |
+
+### 错误响应示例
+
+**400 错误请求**
+```json
+{
+  "message": "请求参数错误",
+  "data": null
+}
+```
+
+**403 无权限**
+```json
+{
+  "message": "无权限访问该资源",
+  "data": null
+}
+```
+
+## 数据格式规范
+
+### 时间格式
+所有时间字段统一使用以下格式：
+```
+YYYY-MM-DD HH:MM:SS
+示例：2025-12-25 12:00:00
+```
+""",
 )
 
 

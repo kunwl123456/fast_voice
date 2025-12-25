@@ -202,9 +202,7 @@ class Voice(Base):
     clone_job_uuid: Mapped[str] = mapped_column(
         String(36), default="", index=True
     )  # 来源克隆任务的 UUID（用于追溯来源）
-    likes_count: Mapped[int] = mapped_column(
-        Integer, default=0, index=True
-    )  # 点赞数
+    likes_count: Mapped[int] = mapped_column(Integer, default=0, index=True)  # 点赞数
     generated_chars_count: Mapped[int] = mapped_column(
         Integer, default=0
     )  # 生成字符数（累计）
@@ -246,8 +244,12 @@ class TTSJob(Base):
     temperature: Mapped[float] = mapped_column(Float, default=1.0)  # 采样温度
     top_k: Mapped[int] = mapped_column(Integer, default=5)  # 采样 top_k
     top_p: Mapped[float] = mapped_column(Float, default=1.0)  # 采样 top_p
-    webhook_url: Mapped[str] = mapped_column(String(512), default="")  # Webhook 回调地址（任务完成时调用）
-    status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.queued, index=True)
+    webhook_url: Mapped[str] = mapped_column(
+        String(512), default=""
+    )  # Webhook 回调地址（任务完成时调用）
+    status: Mapped[JobStatus] = mapped_column(
+        Enum(JobStatus, name="job_status"), default=JobStatus.queued, index=True
+    )
     error: Mapped[str] = mapped_column(String(255), default="")  # 错误码（失败时）
     output_audio_path: Mapped[str] = mapped_column(
         String(255), default=""
@@ -282,7 +284,9 @@ class CloneJob(Base):
     description: Mapped[str] = mapped_column(String(500), default="")  # 音频特征描述
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)  # 标签列表
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)  # 产出音色是否公开
-    remove_background_noise: Mapped[bool] = mapped_column(Boolean, default=False)  # 是否去除背景音
+    remove_background_noise: Mapped[bool] = mapped_column(
+        Boolean, default=False
+    )  # 是否去除背景音
     status: Mapped[JobStatus] = mapped_column(
         Enum(JobStatus, name="job_status"), default=JobStatus.queued, index=True
     )

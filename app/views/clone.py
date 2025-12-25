@@ -16,7 +16,6 @@ from app.responses import (
     success_response,
     not_found_response,
     bad_request_response,
-    validation_error_response,
 )
 from app.deps import (
     get_db,
@@ -28,11 +27,8 @@ from app.schemas import CloneCreateOut, CloneJobOut, Response
 from app.services.idempotency import get_idempotency, set_idempotency
 from app.services.storage import job_dir, save_bytes, to_public_file_url
 
-console_router = APIRouter(prefix="/console", tags=["console-clone"])
-openapi_router = APIRouter(
-    prefix="/openapi",
-    tags=["openapi-clone"],
-)
+console_router = APIRouter(prefix="/console", tags=["音色克隆"])
+openapi_router = APIRouter(prefix="/openapi", tags=["音色克隆"])
 
 
 def _clone_out(job: CloneJob, user_uuid: str) -> CloneJobOut:
@@ -107,7 +103,7 @@ async def console_create_clone(
     try:
         tags_list = json.loads(tags) if tags else []
     except json.JSONDecodeError:
-        return validation_error_response("标签格式错误，必须是JSON数组")
+        return bad_request_response("标签格式错误，必须是JSON数组")
 
     # 验证标签
     is_valid, error_msg = validate_tags(tags_list)
@@ -178,7 +174,9 @@ async def console_get_clone(
     return success_response("获取成功", clone_data.model_dump())
 
 
-@openapi_router.post("/clone/jobs", response_model=Response[CloneCreateOut])
+@openapi_router.post(
+    "/clone/jobs", summary="创建音色克隆任务", response_model=Response[CloneCreateOut]
+)
 async def openapi_create_clone(
     voice_name: str = Form(...),
     avatar_url: str = Form(""),
@@ -191,26 +189,12 @@ async def openapi_create_clone(
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
 ):
-    """创建音色克隆任务
-
-    参数:
-    - voice_name: 音频特征名字（必填）
-    - avatar_url: 头像URL（可选）
-    - description: 音频特征描述（可选）
-    - tags: 标签JSON数组字符串，如 '["中文","女","青年"]'（可选，只能使用预设标签）
-    - is_public: 是否公开，默认false（私密）
-    - remove_background_noise: 是否去除背景音，默认false
-    - files: 音频文件列表（必填）
-
-    提示：可通过 GET /openapi/voices/tags 获取所有可用标签
-    """
-    import json
 
     # 解析标签
     try:
         tags_list = json.loads(tags) if tags else []
     except json.JSONDecodeError:
-        return validation_error_response("标签格式错误，必须是JSON数组")
+        return bad_request_response("标签格式错误，必须是JSON数组")
 
     # 验证标签
     is_valid, error_msg = validate_tags(tags_list)
@@ -274,13 +258,16 @@ async def openapi_create_clone(
     return success_response("克隆任务创建成功", clone_data.model_dump())
 
 
-@openapi_router.get("/clone/jobs/{job_uuid}", response_model=Response[CloneJobOut])
+@openapi_router.get(
+    "/clone/jobs/{job_uuid}",
+    summary="获取音色克隆任务详情",
+    response_model=Response[CloneJobOut],
+)
 async def openapi_get_clone(
     job_uuid: str,
     db: AsyncSession = Depends(get_db),
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
 ):
-    """获取音色克隆任务详情"""
     job = (
         await db.execute(
             select(CloneJob).where(

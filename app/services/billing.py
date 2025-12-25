@@ -16,7 +16,9 @@ def calc_cost(text: str) -> int:
 
 
 async def get_or_create_account(db: AsyncSession, user_id: int) -> CreditAccount:
-    acc = (await db.execute(select(CreditAccount).where(CreditAccount.user_id == user_id))).scalar_one_or_none()
+    acc = (
+        await db.execute(select(CreditAccount).where(CreditAccount.user_id == user_id))
+    ).scalar_one_or_none()
     if acc:
         return acc
     acc = CreditAccount(user_id=user_id, balance=0)
@@ -102,5 +104,3 @@ async def recharge(
             note=note,
         )
     )
-
-

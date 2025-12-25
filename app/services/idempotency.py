@@ -11,8 +11,7 @@ def get_idempotency(kv: KV, user_id: int, endpoint: str, key: str) -> str | None
     return kv.get(idem_key(user_id, endpoint, key))
 
 
-def set_idempotency(kv: KV, user_id: int, endpoint: str, key: str, value: str, ttl_seconds: int = 3600) -> None:
+def set_idempotency(
+    kv: KV, user_id: int, endpoint: str, key: str, value: str, ttl_seconds: int = 3600
+) -> None:
     kv.set_ttl(idem_key(user_id, endpoint, key), value, ttl_seconds)
-
-
-

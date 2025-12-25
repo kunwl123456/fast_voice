@@ -16,7 +16,9 @@ def calc_cost(text: str) -> int:
 
 
 def get_or_create_account(db: Session, user_id: int) -> CreditAccount:
-    acc = db.execute(select(CreditAccount).where(CreditAccount.user_id == user_id)).scalar_one_or_none()
+    acc = db.execute(
+        select(CreditAccount).where(CreditAccount.user_id == user_id)
+    ).scalar_one_or_none()
     if acc:
         return acc
     acc = CreditAccount(user_id=user_id, balance=0)
@@ -25,7 +27,15 @@ def get_or_create_account(db: Session, user_id: int) -> CreditAccount:
     return acc
 
 
-def refund(*, db: Session, user_id: int, amount: int, ref_type: str, ref_id: str, note: str = "") -> None:
+def refund(
+    *,
+    db: Session,
+    user_id: int,
+    amount: int,
+    ref_type: str,
+    ref_id: str,
+    note: str = "",
+) -> None:
     if amount <= 0:
         return
     acc = get_or_create_account(db, user_id)
@@ -40,5 +50,3 @@ def refund(*, db: Session, user_id: int, amount: int, ref_type: str, ref_id: str
             note=note,
         )
     )
-
-
