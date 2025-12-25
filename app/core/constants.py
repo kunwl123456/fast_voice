@@ -1,10 +1,33 @@
 """
-订阅计划配置
-
-定义三种订阅计划的功能和配额
+订阅计划和系统常量配置
+统一管理所有订阅相关的配置，避免硬编码
 """
 
+from enum import Enum
 from dataclasses import dataclass
+
+
+class SubscriptionPlanType(Enum):
+    """订阅计划类型枚举"""
+
+    free = "free"
+    pro = "pro"
+    enterprise = "enterprise"
+
+    @classmethod
+    def values(cls) -> list[str]:
+        """获取所有订阅计划值列表"""
+        return [member.value for member in cls]
+
+    @classmethod
+    def can_upgrade_plans(cls) -> list[str]:
+        """获取可升级的订阅计划列表（不包括免费版）"""
+        return [cls.pro.value, cls.enterprise.value]
+
+
+# ============================================================================
+# 订阅计划配置数据类
+# ============================================================================
 
 
 @dataclass
@@ -20,8 +43,11 @@ class PlanConfig:
     priority_support: bool  # 是否提供优先支持
 
 
+# ============================================================================
 # 订阅计划配置
-SUBSCRIPTION_PLANS = {
+# ============================================================================
+
+SUBSCRIPTION_PLANS: dict[str, PlanConfig] = {
     "free": PlanConfig(
         name="免费版",
         monthly_credits=1000,  # 每月1000积分
@@ -52,19 +78,12 @@ SUBSCRIPTION_PLANS = {
 }
 
 
-def get_plan_config(plan: str) -> PlanConfig:
-    """获取计划配置"""
-    return SUBSCRIPTION_PLANS.get(plan, SUBSCRIPTION_PLANS["free"])
+# 订阅周期：每月天数
+SUBSCRIPTION_DAYS_PER_MONTH = 30
 
+# 订阅月数限制
+SUBSCRIPTION_MIN_MONTHS = 1
+SUBSCRIPTION_MAX_MONTHS = 12
 
-def get_plan_features(plan: str) -> dict:
-    """获取计划功能特性（用于前端展示）"""
-    config = get_plan_config(plan)
-    return {
-        "monthly_credits": config.monthly_credits,
-        "monthly_quota": config.monthly_quota,
-        "clone_limit": config.clone_limit,
-        "api_access": config.api_access,
-        "commercial_use": config.commercial_use,
-        "priority_support": config.priority_support,
-    }
+# 默认订阅计划
+DEFAULT_SUBSCRIPTION_PLAN: str = SubscriptionPlanType.free.value

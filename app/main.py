@@ -4,8 +4,10 @@ import os
 from loguru import logger
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBearer
 
 from app.models import *  # noqa: F401,F403 (ensure models imported for metadata)
+from app.controller.openapi import setup_openapi, OPENAPI_DESCRIPTION
 from app.responses import (
     server_error_response,
     bad_request_response,
@@ -23,12 +25,13 @@ from app.services.storage import ensure_dir
 from app.services.bootstrap import bootstrap_admin
 from app.db import Base, engine, AsyncSessionLocal
 from app.views.console import router as console_router
-from app.views.account import router as account_router
-from app.views.subscription import router as subscription_router
-from app.views.api_keys import router as api_keys_router
 from app.views.credits import router as credits_router
+from app.views.account import router as account_router
+from app.views.api_keys import router as api_keys_router
 from app.views.tts import console_router as tts_console_router
 from app.views.tts import openapi_router as tts_openapi_router
+from app.views.invite_codes import router as invite_codes_router
+from app.views.subscription import router as subscription_router
 from app.views.clone import console_router as clone_console_router
 from app.views.clone import openapi_router as clone_openapi_router
 from app.views.voices import console_router as voices_console_router
@@ -36,75 +39,22 @@ from app.views.voices import openapi_router as voices_openapi_router
 
 
 app = FastAPI(
-    title="FastVoice API Document",
+    title="FastVoice",
     version="0.1.0",
-    description="""
-# API 说明
+    description=OPENAPI_DESCRIPTION,
+    # 配置 Bearer Token 认证
+    swagger_ui_parameters={
+        "persistAuthorization": True,  # 持久化认证信息（刷新页面后不需要重新输入）
+    },
+)
 
-## 认证方式
+# 配置自定义 OpenAPI schema
+setup_openapi(app)
 
-### JWT Token 认证（控制台）
-```
-Authorization: Bearer <access_token>
-```
-
-### API Key 认证（企业版 OpenAPI）
-```
-Authorization: Bearer <api_key>
-```
-
-## 响应说明
-
-### 响应格式
-所有接口均返回统一格式：
-```json
-{
-  "message": "提示信息",
-  "data": {} // 响应数据或错误详情
-}
-```
-
-### HTTP 状态码说明
-
-| 状态码 | 说明 | 示例场景 |
-|--------|------|----------|
-| 200 | 请求成功 | 数据查询、更新、删除成功 |
-| 201 | 创建成功 | 资源创建成功 |
-| 400 | 请求参数错误 | 参数错误，例如缺少必需参数、参数格式错误 |
-| 401 | 未授权 | 未登录、token 无效或过期 |
-| 403 | 无权限 | 没有操作权限 |
-| 404 | 资源不存在 | 请求的资源未找到 |
-| 409 | 资源冲突 | 邮箱已注册、资源已存在 |
-| 422 | 参数验证失败 | 字段验证不通过 |
-| 500 | 服务器内部错误 | 系统异常 |
-
-### 错误响应示例
-
-**400 错误请求**
-```json
-{
-  "message": "请求参数错误",
-  "data": null
-}
-```
-
-**403 无权限**
-```json
-{
-  "message": "无权限访问该资源",
-  "data": null
-}
-```
-
-## 数据格式规范
-
-### 时间格式
-所有时间字段统一使用以下格式：
-```
-YYYY-MM-DD HH:MM:SS
-示例：2025-12-25 12:00:00
-```
-""",
+# 定义安全方案（用于在路由中引用，如果需要显示锁图标）
+security = HTTPBearer(
+    scheme_name="Bearer Authentication",
+    description="输入你的 JWT Token 或 API Key（自动添加 'Bearer ' 前缀）",
 )
 
 
@@ -211,6 +161,7 @@ app.include_router(account_router)
 app.include_router(subscription_router)
 app.include_router(api_keys_router)
 app.include_router(credits_router)
+app.include_router(invite_codes_router)
 app.include_router(console_router)
 app.include_router(voices_console_router)
 app.include_router(voices_openapi_router)

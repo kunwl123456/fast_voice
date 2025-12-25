@@ -7,9 +7,10 @@ from datetime import datetime, timedelta
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ApiKey, SubscriptionPlan, User
+from app.models import ApiKey, User
 from app.core.security import generate_api_key
 from app.schemas import ApiKeyListItem, ApiKeyOut
+from app.core.constants import SubscriptionPlanType
 
 
 def _mask_api_key(api_key: str) -> str:
@@ -173,4 +174,4 @@ def check_enterprise_permission(user: User) -> bool:
     ### 返回
     - 是否有企业版权限
     """
-    return user.subscription_plan == SubscriptionPlan.enterprise
+    return bool(user.subscription_plan.value == SubscriptionPlanType.enterprise.value)

@@ -12,6 +12,7 @@ from app.controller.subscription import (
     get_user_subscription,
     upgrade_user_subscription,
     validate_plan,
+    SubscriptionPlanType,
 )
 from app.schemas import Response, SubscriptionInfo, UpgradeSubscriptionIn
 
@@ -59,7 +60,7 @@ async def upgrade_subscription(
     """
     if not validate_plan(payload.plan):
         return bad_request_response(
-            "无效的订阅计划", {"valid_plans": ["pro", "enterprise"]}
+            "无效的订阅计划", {"valid_plans": SubscriptionPlanType.can_upgrade_plans()}
         )
 
     result = await upgrade_user_subscription(db, user, payload.plan, payload.months)

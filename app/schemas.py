@@ -5,6 +5,12 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_serializer
 
+from app.core.constants import (
+    SubscriptionPlanType,
+    SUBSCRIPTION_MIN_MONTHS,
+    SUBSCRIPTION_MAX_MONTHS,
+)
+
 # 定义泛型类型变量
 T = TypeVar("T")
 
@@ -41,6 +47,7 @@ class RegisterIn(BaseModel):
     display_name: str = Field(
         default="", max_length=100, description="显示名称（最多100个字符，可选）"
     )
+    invite_code: str = Field(description="邀请码（必须）")
 
 
 class LoginIn(BaseModel):
@@ -237,9 +244,16 @@ class UpgradeSubscriptionIn(BaseModel):
     """升级订阅"""
 
     plan: str = Field(
-        ..., pattern="^(pro|enterprise)$", description="目标计划：pro或enterprise"
+        ...,
+        pattern=f"^({'|'.join(SubscriptionPlanType.can_upgrade_plans())})$",
+        description=f"目标计划：{' 或 '.join(SubscriptionPlanType.can_upgrade_plans())}",
     )
-    months: int = Field(default=1, ge=1, le=12, description="订阅月数")
+    months: int = Field(
+        default=1,
+        ge=SUBSCRIPTION_MIN_MONTHS,
+        le=SUBSCRIPTION_MAX_MONTHS,
+        description=f"订阅月数（{SUBSCRIPTION_MIN_MONTHS}-{SUBSCRIPTION_MAX_MONTHS}个月）",
+    )
 
 
 class VoiceOut(BaseModel):
@@ -345,5 +359,44 @@ class CloneJobOut(JobOut):
     result_voice_uuid: str | None = Field(None, description="克隆成功后生成的音色 UUID")
 
     @field_serializer("created_at")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
+
+
+class InviteCodeOut(BaseModel):
+    """邀请码信息"""
+
+    id: int = Field(description="邀请码 ID")
+    code: str = Field(description="邀请码")
+    is_used: bool = Field(description="是否已使用")
+    used_by_email: str | None = Field(None, description="使用者邮箱")
+    expires_at: datetime | str | None = Field(description="过期时间")
+    note: str = Field(description="备注说明")
+    created_at: datetime | str = Field(description="创建时间")
+    used_at: datetime | str | None = Field(None, description="使用时间")
+
+    @field_serializer("expires_at", "created_at", "used_at")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
+
+
+class CreateInviteCodeIn(BaseModel):
+    """创建邀请码请求"""
+
+    count: int = Field(default=1, ge=1, le=100, description="生成数量（1-100）")
+    expires_days: int | None = Field(
+        default=None, ge=1, description="有效期天数（null表示永不过期）"
+    )
+    note: str = Field(default="", max_length=255, description="备注说明（可选）")
+
+
+class BatchInviteCodesOut(BaseModel):
+    """批量生成邀请码的响应"""
+
+    codes: list[str] = Field(description="生成的邀请码列表")
+    count: int = Field(description="生成数量")
+    expires_at: datetime | str | None = Field(description="过期时间")
+
+    @field_serializer("expires_at")
     def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
         return format_datetime(dt)

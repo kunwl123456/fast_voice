@@ -1,11 +1,12 @@
 from __future__ import annotations
+import secrets
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import generate_api_key, hash_password
-from app.models import ApiKey, CreditAccount, SubscriptionPlan, User
+from app.models import ApiKey, CreditAccount, SubscriptionPlan, User, InviteCode
 
 
 async def bootstrap_admin(db: AsyncSession) -> None:
@@ -32,7 +33,9 @@ async def bootstrap_admin(db: AsyncSession) -> None:
         admin.display_name = "AutoGame"
         admin.avatar_url = "/files/static/avatars/autogame_icon.jpg"
         admin.is_admin = True
-        admin.subscription_plan = SubscriptionPlan.enterprise
+        # 确保管理员始终是企业版
+        if admin.subscription_plan.value != SubscriptionPlan.enterprise.value:
+            admin.subscription_plan = SubscriptionPlan.enterprise
 
         db.add(admin)
         await db.commit()
@@ -70,8 +73,24 @@ async def bootstrap_admin(db: AsyncSession) -> None:
     )
     db.add(api_key)
 
+    # 创建初始邀请码（5个永久有效的邀请码）
+    initial_codes = []
+    for i in range(5):
+        code = secrets.token_urlsafe(24)[:32]
+        invite = InviteCode(
+            code=code,
+            created_by_user_id=admin.id,
+            expires_at=None,  # 永久有效
+            note=f"系统初始邀请码 #{i+1}",
+        )
+        db.add(invite)
+        initial_codes.append(code)
+
     # 提交事务
     await db.commit()
     print(f"✅ 管理员账号创建完成：{settings.admin_email}")
     print("   - 初始积分：100,000")
     print(f"   - API Key: {api_key_value}")
+    print("   - 初始邀请码：")
+    for i, code in enumerate(initial_codes, 1):
+        print(f"     {i}. {code}")

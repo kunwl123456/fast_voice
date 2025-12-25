@@ -141,7 +141,10 @@ async def official_voices(
     tags: list[str] = Query(None, description="标签筛选，可传递多个标签"),
     limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
     offset: int = Query(0, ge=0, description="偏移量，用于分页"),
-    orderBy: str = Query("createdAt", description="排序字段: likes(点赞), usage(使用次数), chars(生成字符数), createdAt(创建时间)"),
+    orderBy: str = Query(
+        "createdAt",
+        description="排序字段: likes(点赞), usage(使用次数), chars(生成字符数), createdAt(创建时间)",
+    ),
 ):
     # 先找到 autogame 用户
     autogame_user = (
@@ -154,26 +157,24 @@ async def official_voices(
 
     # 构建基础查询
     query = select(Voice).where(Voice.owner_user_id == autogame_user.id)
-    
+
     # 如果指定了标签，进行筛选
     if tags:
         # 对于 JSON 类型的标签字段，检查是否包含任一指定标签
-        from sqlalchemy import or_, cast, String, Text
+        from sqlalchemy import or_, cast
         from sqlalchemy.dialects.postgresql import JSONB
-        
+
         # 为每个标签创建一个条件：Voice.tags 包含该标签
         conditions = []
         for tag in tags:
             # PostgreSQL: 使用 @> 操作符检查 JSON 数组是否包含元素
             # 格式: tags @> '["tag_value"]'
-            conditions.append(
-                cast(Voice.tags, JSONB).contains([tag])
-            )
-        
+            conditions.append(cast(Voice.tags, JSONB).contains([tag]))
+
         # 使用 OR 连接所有条件（满足任一标签即可）
         if conditions:
             query = query.where(or_(*conditions))
-    
+
     # 根据 orderBy 参数选择排序方式
     if orderBy == "likes":
         # 按点赞数降序，点赞数相同则按 ID 降序
@@ -186,7 +187,7 @@ async def official_voices(
         query = query.order_by(Voice.generated_chars_count.desc(), Voice.id.desc())
     else:  # 默认按创建时间（ID）降序
         query = query.order_by(Voice.id.desc())
-    
+
     # 应用分页
     query = query.limit(limit).offset(offset)
 
@@ -222,29 +223,30 @@ async def public_voices(
     tags: list[str] = Query(None, description="标签筛选，可传递多个标签"),
     limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
     offset: int = Query(0, ge=0, description="偏移量，用于分页"),
-    orderBy: str = Query("createdAt", description="排序字段: likes(点赞), usage(使用次数), chars(生成字符数), createdAt(创建时间)"),
+    orderBy: str = Query(
+        "createdAt",
+        description="排序字段: likes(点赞), usage(使用次数), chars(生成字符数), createdAt(创建时间)",
+    ),
 ):
     query = select(Voice).where(Voice.is_public.is_(True))
-    
+
     # 如果指定了标签，进行筛选
     if tags:
         # 对于 JSON 类型的标签字段，检查是否包含任一指定标签
-        from sqlalchemy import or_, cast, String, Text
+        from sqlalchemy import or_, cast
         from sqlalchemy.dialects.postgresql import JSONB
-        
+
         # 为每个标签创建一个条件：Voice.tags 包含该标签
         conditions = []
         for tag in tags:
             # PostgreSQL: 使用 @> 操作符检查 JSON 数组是否包含元素
             # 格式: tags @> '["tag_value"]'
-            conditions.append(
-                cast(Voice.tags, JSONB).contains([tag])
-            )
-        
+            conditions.append(cast(Voice.tags, JSONB).contains([tag]))
+
         # 使用 OR 连接所有条件（满足任一标签即可）
         if conditions:
             query = query.where(or_(*conditions))
-    
+
     # 根据 orderBy 参数选择排序方式
     if orderBy == "likes":
         # 按点赞数降序，点赞数相同则按 ID 降序
@@ -257,10 +259,10 @@ async def public_voices(
         query = query.order_by(Voice.generated_chars_count.desc(), Voice.id.desc())
     else:  # 默认按创建时间（ID）降序
         query = query.order_by(Voice.id.desc())
-    
+
     # 应用分页
     query = query.limit(limit).offset(offset)
-    
+
     voices = (await db.execute(query)).scalars().all()
 
     voices_data = [_voice_out(v).model_dump() for v in voices]

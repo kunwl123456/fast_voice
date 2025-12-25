@@ -332,3 +332,36 @@ class ApiRequestLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=format_timezone, index=True
     )
+
+
+class InviteCode(Base):
+    """
+    表：invite_codes
+    用途：邀请码管理（邀请制注册）。
+    """
+
+    __tablename__ = "invite_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(
+        String(32), unique=True, index=True
+    )  # 邀请码（唯一）
+    created_by_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), index=True
+    )  # 创建者（管理员）
+    used_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )  # 使用者（注册用户）
+    is_used: Mapped[bool] = mapped_column(
+        Boolean, default=False, index=True
+    )  # 是否已使用
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )  # 过期时间（null 表示永久有效）
+    note: Mapped[str] = mapped_column(String(255), default="")  # 备注说明
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=format_timezone
+    )
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )  # 使用时间

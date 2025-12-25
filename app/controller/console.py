@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ApiRequestLog, User, Voice
 from app.services.billing import get_or_create_account
-from app.subscription import get_plan_config
+from app.controller.subscription import get_plan_config
 from app.schemas import DashboardOut, RequestLogOut, UsageStatsOut, PaginatedRequestLogs
 
 

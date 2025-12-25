@@ -6,10 +6,42 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import CreditTransaction, SubscriptionPlan, TxType, User
-from app.services.billing import get_or_create_account
-from app.subscription import get_plan_config, get_plan_features
 from app.schemas import SubscriptionInfo
+from app.services.billing import get_or_create_account
+from app.models import CreditTransaction, SubscriptionPlan, TxType, User
+from app.core.constants import (
+    PlanConfig,
+    SUBSCRIPTION_PLANS,
+    SubscriptionPlanType,
+    SUBSCRIPTION_DAYS_PER_MONTH,
+)
+
+
+def has_api_access(plan: str) -> bool:
+    """
+    检查订阅计划是否有API访问权限
+
+    Args:
+        plan: 订阅计划代码
+
+    Returns:
+        bool: 是否有API访问权限
+    """
+    config = get_plan_config(plan)
+    return config.api_access
+
+
+def get_plan_config(plan: str) -> PlanConfig:
+    """
+    获取计划配置
+
+    Args:
+        plan: 订阅计划代码 (free/pro/enterprise)
+
+    Returns:
+        PlanConfig: 计划配置对象，如果计划不存在则返回免费版配置
+    """
+    return SUBSCRIPTION_PLANS.get(plan, SUBSCRIPTION_PLANS["free"])
 
 
 async def get_user_subscription(user: User) -> SubscriptionInfo:
@@ -35,7 +67,14 @@ async def get_user_subscription(user: User) -> SubscriptionInfo:
         plan_name=plan_config.name,
         status=status,
         ends_at=user.subscription_ends_at,
-        features=get_plan_features(user.subscription_plan.value),
+        features={
+            "monthly_credits": plan_config.monthly_credits,
+            "monthly_quota": plan_config.monthly_quota,
+            "clone_limit": plan_config.clone_limit,
+            "api_access": plan_config.api_access,
+            "commercial_use": plan_config.commercial_use,
+            "priority_support": plan_config.priority_support,
+        },
     )
 
 
@@ -56,7 +95,7 @@ async def upgrade_user_subscription(
     """
     # 计算订阅到期时间
     now = datetime.now()
-    ends_at = now + timedelta(days=30 * months)
+    ends_at = now + timedelta(days=SUBSCRIPTION_DAYS_PER_MONTH * months)
 
     # 更新用户订阅
     user.subscription_plan = SubscriptionPlan(plan)
@@ -92,12 +131,12 @@ async def upgrade_user_subscription(
 
 def validate_plan(plan: str) -> bool:
     """
-    验证订阅计划是否有效
+    验证订阅计划是否有效（是否可升级）
 
     ### 参数
     - plan: 订阅计划代码
 
     ### 返回
-    - 是否有效
+    - 是否有效（pro/enterprise）
     """
-    return plan in ["pro", "enterprise"]
+    return plan in SubscriptionPlanType.can_upgrade_plans()
