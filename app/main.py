@@ -8,6 +8,7 @@ from fastapi.security import HTTPBearer
 
 from app.models import *  # noqa: F401,F403 (ensure models imported for metadata)
 from app.controller.openapi import setup_openapi, OPENAPI_DESCRIPTION
+from app.core.middlewares import OpenAPILoggingMiddleware
 from app.responses import (
     server_error_response,
     bad_request_response,
@@ -56,6 +57,9 @@ security = HTTPBearer(
     scheme_name="Bearer Authentication",
     description="输入你的 JWT Token 或 API Key（自动添加 'Bearer ' 前缀）",
 )
+
+# 添加 OpenAPI 请求日志中间件（必须在其他中间件之前）
+app.add_middleware(OpenAPILoggingMiddleware)
 
 
 @app.middleware("http")

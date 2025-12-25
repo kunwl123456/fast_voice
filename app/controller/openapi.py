@@ -115,9 +115,8 @@ def setup_openapi(app: FastAPI):
             }
         }
 
-        # 为所有接口添加全局安全要求（这样右上角会显示 Authorize 按钮）
-        # 注释掉下面这行，则只有单独配置了 security 的接口才需要认证
-        # openapi_schema["security"] = [{"BearerAuth": []}]
+        # 为所有接口添加全局安全要求（这样 Swagger UI 会自动在请求中添加 Token）
+        openapi_schema["security"] = [{"BearerAuth": []}]
 
         app.openapi_schema = openapi_schema
         return app.openapi_schema
