@@ -1,11 +1,29 @@
 from __future__ import annotations
 
 from typing import Generic, TypeVar
+from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_serializer
 
 # 定义泛型类型变量
 T = TypeVar("T")
+
+
+def format_datetime(dt: datetime | str | None) -> str | None:
+    """
+    格式化时间字段为统一格式
+
+    Args:
+        dt: datetime 对象、字符串或 None
+
+    Returns:
+        格式化后的时间字符串（格式：2025-12-12 12:00:00）或 None
+    """
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        return dt
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
 class Response(BaseModel, Generic[T]):
@@ -16,47 +34,61 @@ class Response(BaseModel, Generic[T]):
 
 
 class RegisterIn(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=6, max_length=72)
-    display_name: str = Field(default="", max_length=100)
+    email: EmailStr = Field(description="用户邮箱地址")
+    password: str = Field(
+        min_length=6, max_length=72, description="登录密码（6-72个字符）"
+    )
+    display_name: str = Field(
+        default="", max_length=100, description="显示名称（最多100个字符，可选）"
+    )
 
 
 class LoginIn(BaseModel):
-    email: EmailStr
-    password: str
+    email: EmailStr = Field(description="用户邮箱地址")
+    password: str = Field(description="登录密码")
 
 
 class TokenOut(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+    access_token: str = Field(description="JWT 访问令牌")
+    token_type: str = Field(default="bearer", description="令牌类型")
 
 
 class MeOut(BaseModel):
-    id: str  # 用户UUID
-    email: EmailStr
-    display_name: str
-    avatar_url: str  # 头像链接
-    is_admin: bool
-    subscription_plan: str  # free, pro, enterprise
-    subscription_ends_at: str | None  # 订阅到期时间
-    credit_balance: int  # 积分余额
+    id: str = Field(description="用户 UUID")
+    email: EmailStr = Field(description="邮箱地址")
+    display_name: str = Field(description="显示名称")
+    avatar_url: str = Field(description="头像 URL")
+    is_admin: bool = Field(description="是否管理员")
+    subscription_plan: str = Field(description="订阅计划（free/pro/enterprise）")
+    subscription_ends_at: datetime | str | None = Field(description="订阅到期时间")
+    credit_balance: int = Field(description="积分余额")
+
+    @field_serializer("subscription_ends_at")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
 
 
 class RegisterOut(BaseModel):
     """注册成功返回的数据"""
 
-    id: str  # 用户UUID
-    email: EmailStr
-    display_name: str
-    avatar_url: str  # 头像链接
-    is_admin: bool
-    subscription_plan: str  # free, pro, enterprise
-    subscription_ends_at: str | None  # 订阅到期时间
-    credit_balance: int  # 积分余额
+    id: str = Field(description="用户 UUID")
+    email: EmailStr = Field(description="邮箱地址")
+    display_name: str = Field(description="显示名称")
+    avatar_url: str = Field(description="头像 URL")
+    is_admin: bool = Field(description="是否管理员")
+    subscription_plan: str = Field(description="订阅计划（free/pro/enterprise）")
+    subscription_ends_at: datetime | str | None = Field(description="订阅到期时间")
+    credit_balance: int = Field(description="积分余额")
+
+    @field_serializer("subscription_ends_at")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
 
 
 class RenameIn(BaseModel):
-    display_name: str = Field(min_length=1, max_length=100)
+    display_name: str = Field(
+        min_length=1, max_length=100, description="新的显示名称（1-100个字符）"
+    )
 
 
 class UpdateAvatarIn(BaseModel):
@@ -64,34 +96,52 @@ class UpdateAvatarIn(BaseModel):
 
 
 class ChangePasswordIn(BaseModel):
-    old_password: str
-    new_password: str = Field(min_length=6, max_length=72)
+    old_password: str = Field(description="原密码")
+    new_password: str = Field(
+        min_length=6, max_length=72, description="新密码（6-72个字符）"
+    )
 
 
 class SubscriptionInfo(BaseModel):
     """订阅计划信息"""
 
-    plan: str  # free, pro, enterprise
-    plan_name: str  # 免费版、专业版、企业版
-    status: str  # active, expired, cancelled
-    ends_at: str | None
-    features: dict  # 功能特性
+    plan: str = Field(description="订阅计划代码（free/pro/enterprise）")
+    plan_name: str = Field(description="计划名称（免费版/专业版/企业版）")
+    status: str = Field(description="订阅状态（active/expired/cancelled）")
+    ends_at: datetime | str | None = Field(description="订阅到期时间")
+    features: dict = Field(description="功能特性列表")
+
+    @field_serializer("ends_at")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
 
 
 class ApiKeyOut(BaseModel):
-    api_key: str
-    expires_at: str | None  # ISO 格式的过期时间，None 表示永不过期
+    api_key: str = Field(description="完整的 API Key（仅创建时显示一次）")
+    expires_at: datetime | str | None = Field(
+        description="过期时间（null 表示永不过期）"
+    )
+
+    @field_serializer("expires_at")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
 
 
 class ApiKeyListItem(BaseModel):
     """API Key列表项"""
 
-    id: int
-    name: str
-    api_key_masked: str  # 脱敏显示，如 sk-...844f
-    is_active: bool
-    expires_at: str | None  # 过期时间（为空表示永久有效）
-    created_at: str
+    id: int = Field(description="API Key ID")
+    name: str = Field(description="密钥名称")
+    api_key_masked: str = Field(description="脱敏显示的 Key（如 sk-...）")
+    is_active: bool = Field(description="是否激活")
+    expires_at: datetime | str | None = Field(
+        description="过期时间（null 表示永久有效）"
+    )
+    created_at: datetime | str = Field(description="创建时间")
+
+    @field_serializer("expires_at", "created_at")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
 
 
 class CreateApiKeyIn(BaseModel):
@@ -106,73 +156,81 @@ class CreateApiKeyIn(BaseModel):
 class DashboardOut(BaseModel):
     """Dashboard概览数据"""
 
-    user_id: str  # 用户UUID
-    email: str
-    plan_name: str
-    plan_status: str  # active, expired
-    monthly_usage: int  # 本月使用量（请求数）
-    monthly_quota: int  # 月度配额（根据计划不同）
-    usage_percent: float  # 使用百分比
-    next_billing_date: str  # 下一个账单日期
-    credit_balance: int  # 积分余额
-    clone_count: int  # 已克隆音色数量
-    clone_limit: int  # 克隆位限制（-1表示无限）
-    api_access_enabled: bool  # 是否可以使用API
+    user_id: str = Field(description="用户 UUID")
+    email: str = Field(description="邮箱地址")
+    plan_name: str = Field(description="订阅计划名称")
+    plan_status: str = Field(description="订阅状态（active/expired）")
+    monthly_usage: int = Field(description="本月使用量（API 调用次数）")
+    monthly_quota: int = Field(description="月度配额（根据计划不同）")
+    usage_percent: float = Field(description="使用率百分比")
+    next_billing_date: str = Field(description="下一个账单日期")
+    credit_balance: int = Field(description="积分余额")
+    clone_count: int = Field(description="已克隆音色数量")
+    clone_limit: int = Field(description="音色克隆上限（-1表示无限）")
+    api_access_enabled: bool = Field(description="是否启用 API 访问")
 
 
 class UsageStatsOut(BaseModel):
     """使用统计数据"""
 
-    date: str
-    total_requests: int
-    successful_requests: int
-    failed_requests: int
+    date: str = Field(description="日期（YYYY-MM-DD 格式）")
+    total_requests: int = Field(description="总请求数")
+    successful_requests: int = Field(description="成功请求数（状态码 200）")
+    failed_requests: int = Field(description="失败请求数")
 
 
 class RequestLogOut(BaseModel):
     """API请求日志"""
 
-    id: int
-    timestamp: str
-    endpoint: str
-    method: str
-    status_code: int
-    latency_ms: int
-    response_size: int
-    error_message: str
+    id: int = Field(description="日志 ID")
+    timestamp: datetime | str = Field(description="请求时间")
+    endpoint: str = Field(description="请求路径")
+    method: str = Field(description="HTTP 方法")
+    status_code: int = Field(description="响应状态码")
+    latency_ms: int = Field(description="响应延迟（毫秒）")
+    response_size: int = Field(description="响应大小（字节）")
+    error_message: str = Field(description="错误消息（如有）")
+
+    @field_serializer("timestamp")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
 
 
 class PaginatedRequestLogs(BaseModel):
     """分页的API请求日志"""
 
-    items: list[RequestLogOut]
-    total: int
-    page: int
-    page_size: int
-    total_pages: int
-    has_next: bool
-    has_prev: bool
+    items: list[RequestLogOut] = Field(description="日志列表")
+    total: int = Field(description="总记录数")
+    page: int = Field(description="当前页码")
+    page_size: int = Field(description="每页条数")
+    total_pages: int = Field(description="总页数")
+    has_next: bool = Field(description="是否有下一页")
+    has_prev: bool = Field(description="是否有上一页")
 
 
 class CreditAccountOut(BaseModel):
-    user_id: str  # 用户UUID
-    balance: int
+    user_id: str = Field(description="用户 UUID")
+    balance: int = Field(description="积分余额")
 
 
 class CreditTxOut(BaseModel):
-    id: int
-    tx_type: str
-    amount: int
-    ref_type: str
-    ref_id: str
-    note: str
-    created_at: str
+    id: int = Field(description="交易 ID")
+    tx_type: str = Field(description="交易类型（subscription/recharge/consume/refund）")
+    amount: int = Field(description="金额（正数为收入，负数为支出）")
+    ref_type: str = Field(description="关联类型")
+    ref_id: str = Field(description="关联 ID")
+    note: str = Field(description="备注说明")
+    created_at: datetime | str = Field(description="交易时间")
+
+    @field_serializer("created_at")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
 
 
 class RechargeIn(BaseModel):
-    user_id: str  # 用户UUID
-    amount: int = Field(gt=0, description="充值金额（必须为正数）")
-    note: str = ""
+    user_id: str = Field(description="目标用户的 UUID")
+    amount: int = Field(gt=0, description="充值金额（必须为正整数）")
+    note: str = Field(default="", description="备注说明（可选）")
 
 
 class UpgradeSubscriptionIn(BaseModel):
@@ -185,24 +243,28 @@ class UpgradeSubscriptionIn(BaseModel):
 
 
 class VoiceOut(BaseModel):
-    id: str  # Voice 的 UUID
-    name: str
-    avatar_url: str = ""
-    description: str
-    tags: list[str] = []
-    is_public: bool
-    preview_audio_url: str = ""
-    clone_job_uuid: str = ""  # 克隆任务UUID（用于TTS）
-    likes_count: int = 0  # 点赞数
-    generated_chars_count: int = 0  # 生成字符数
-    usage_count: int = 0  # 使用次数
-    created_at: str  # 创建时间
+    id: str = Field(description="音色 UUID")
+    name: str = Field(description="音色名称")
+    avatar_url: str = Field(default="", description="音色头像 URL")
+    description: str = Field(description="音色描述")
+    tags: list[str] = Field(default=[], description="音色标签列表")
+    is_public: bool = Field(description="是否公开")
+    preview_audio_url: str = Field(default="", description="预览音频 URL")
+    clone_job_uuid: str = Field(default="", description="克隆任务 UUID（用于 TTS）")
+    likes_count: int = Field(default=0, description="点赞数")
+    generated_chars_count: int = Field(default=0, description="生成字符数")
+    usage_count: int = Field(default=0, description="使用次数")
+    created_at: datetime | str = Field(description="创建时间")
+
+    @field_serializer("created_at")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
 
 
 class VoiceUpdateIn(BaseModel):
-    description: str | None = None
-    is_public: bool | None = None
-    tags: list[str] | None = Field(None, description="音色标签，只能使用预设标签")
+    description: str | None = Field(None, description="音色描述（可选）")
+    is_public: bool | None = Field(None, description="是否公开（可选）")
+    tags: list[str] | None = Field(None, description="音色标签列表（只能使用预设标签）")
 
 
 class VoiceRenameIn(BaseModel):
@@ -230,48 +292,58 @@ class TTSCreatIn(BaseModel):
 
 
 class JobOut(BaseModel):
-    id: str  # UUID 字符串
-    status: str
-    error: str = ""
+    id: str = Field(description="任务 UUID")
+    status: str = Field(description="任务状态")
+    error: str = Field(default="", description="错误信息（如有）")
 
 
 class TTSJobOut(JobOut):
-    voice_uuid: str  # 使用的音色 UUID
-    text_utf8_bytes: int
-    cost_credits: int
-    tags: list[str]
-    speed_factor: float
-    temperature: float
-    top_k: int
-    top_p: float
-    output_audio_url: str = ""
+    voice_uuid: str = Field(description="使用的音色 UUID")
+    text_utf8_bytes: int = Field(description="文本字节数（UTF-8编码）")
+    cost_credits: int = Field(description="消耗的积分数")
+    tags: list[str] = Field(description="音色标签")
+    speed_factor: float = Field(description="语速系数")
+    temperature: float = Field(description="采样温度")
+    top_k: int = Field(description="采样 top_k 参数")
+    top_p: float = Field(description="采样 top_p 参数")
+    output_audio_url: str = Field(default="", description="输出音频 URL")
 
 
 class CloneCreateIn(BaseModel):
-    voice_name: str = (Field(description="音频特征名字"),)
-    avatar_url: str = Field("", description="头像URL")
-    description: str = Field("", description="音频特征描述")
-    tags: list = Field(default=[], description="标签JSON数组")
-    is_public: bool = Field(False, description="是否公开")
-    remove_background_noise: bool = Field(False, description="是否去除背景音")
+    voice_name: str = Field(description="音色名称")
+    avatar_url: str = Field(default="", description="头像 URL（可选）")
+    description: str = Field(default="", description="音色描述（可选）")
+    tags: list = Field(default=[], description="标签列表（JSON 数组）")
+    is_public: bool = Field(default=False, description="是否公开（默认为 false）")
+    remove_background_noise: bool = Field(
+        default=False, description="是否去除背景噪音（默认为 false）"
+    )
 
 
 class CloneCreateOut(JobOut):
-    voice_name: str
-    avatar_url: str = ""
-    description: str = ""
-    tags: list[str] = []
-    user_id: str  # 用户UUID
-    created_at: str
-    preview_audio_url: str = ""
+    voice_name: str = Field(description="音色名称")
+    avatar_url: str = Field(default="", description="头像 URL")
+    description: str = Field(default="", description="音色描述")
+    tags: list[str] = Field(default=[], description="标签列表")
+    user_id: str = Field(description="用户 UUID")
+    created_at: datetime | str = Field(description="创建时间")
+    preview_audio_url: str = Field(default="", description="预览音频 URL")
+
+    @field_serializer("created_at")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
 
 
 class CloneJobOut(JobOut):
-    voice_name: str
-    avatar_url: str = ""
-    description: str = ""
-    tags: list[str] = []
-    user_id: str  # 用户UUID
-    created_at: str
-    preview_audio_url: str = ""
-    result_voice_uuid: str | None = None  # 克隆成功后生成的音色 UUID
+    voice_name: str = Field(description="音色名称")
+    avatar_url: str = Field(default="", description="头像 URL")
+    description: str = Field(default="", description="音色描述")
+    tags: list[str] = Field(default=[], description="标签列表")
+    user_id: str = Field(description="用户 UUID")
+    created_at: datetime | str = Field(description="创建时间")
+    preview_audio_url: str = Field(default="", description="预览音频 URL")
+    result_voice_uuid: str | None = Field(None, description="克隆成功后生成的音色 UUID")
+
+    @field_serializer("created_at")
+    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)

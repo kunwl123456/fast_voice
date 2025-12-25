@@ -3,5 +3,4 @@ __all__ = [
     "voices",
     "tts",
     "clone",
-    "openapi_docs",
 ]

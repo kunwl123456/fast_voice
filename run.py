@@ -80,5 +80,5 @@ if __name__ == "__main__":
 
     # 启动 uvicorn 服务器
     uvicorn.run(
-        "app.main:app", host="0.0.0.0", port=9000, reload=True, log_level="info"
+        "app.main:app", host="0.0.0.0", port=9000, reload=False, log_level="info"
     )

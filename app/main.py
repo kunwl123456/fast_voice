@@ -22,36 +22,22 @@ from app.core.config import settings
 from app.services.storage import ensure_dir
 from app.services.bootstrap import bootstrap_admin
 from app.db import Base, engine, AsyncSessionLocal
-from app.routes.console import router as console_router
-from app.routes.tts import console_router as tts_console_router
-from app.routes.tts import openapi_router as tts_openapi_router
-from app.routes.openapi_docs import router as openapi_docs_router
-from app.routes.clone import console_router as clone_console_router
-from app.routes.clone import openapi_router as clone_openapi_router
-from app.routes.voices import console_router as voices_console_router
-from app.routes.voices import openapi_router as voices_openapi_router
+from app.views.console import router as console_router
+from app.views.account import router as account_router
+from app.views.subscription import router as subscription_router
+from app.views.api_keys import router as api_keys_router
+from app.views.credits import router as credits_router
+from app.views.tts import console_router as tts_console_router
+from app.views.tts import openapi_router as tts_openapi_router
+from app.views.clone import console_router as clone_console_router
+from app.views.clone import openapi_router as clone_openapi_router
+from app.views.voices import console_router as voices_console_router
+from app.views.voices import openapi_router as voices_openapi_router
 
-
-# 定义 OpenAPI tags 元数据
-tags_metadata = [
-    {
-        "name": "tts",
-        "description": "文本转语音服务，支持异步任务和实时流式输出",
-    },
-    {
-        "name": "clone",
-        "description": "音色克隆服务，通过上传音频文件创建自定义音色",
-    },
-    {
-        "name": "voices",
-        "description": "音色管理服务，包括我的音色、公开音色列表等",
-    },
-]
 
 app = FastAPI(
     title="fast_voice",
     version="0.1.0",
-    openapi_tags=tags_metadata,
 )
 
 
@@ -154,6 +140,10 @@ async def _startup():
     init_files()
 
 
+app.include_router(account_router)
+app.include_router(subscription_router)
+app.include_router(api_keys_router)
+app.include_router(credits_router)
 app.include_router(console_router)
 app.include_router(voices_console_router)
 app.include_router(voices_openapi_router)
@@ -161,4 +151,3 @@ app.include_router(tts_console_router)
 app.include_router(tts_openapi_router)
 app.include_router(clone_console_router)
 app.include_router(clone_openapi_router)
-app.include_router(openapi_docs_router)

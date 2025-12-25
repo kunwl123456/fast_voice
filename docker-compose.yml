@@ -17,31 +17,29 @@ x-common-environment: &common-environment
 
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: harbor.autogame.ai/backend/fast-voice:${IMAGE_TAG:-dev_latest}
+    container_name: fast-voice-api
     environment:
       <<: *common-environment
-      AUTO_CREATE_DB: true
-      ADMIN_BOOTSTRAP: true
+      AUTO_CREATE_DB: "true"
+      ADMIN_BOOTSTRAP: "true"
       ADMIN_EMAIL: admin@autogame.ai
       ADMIN_PASSWORD: Nank$$CA#RKdU78tt
     volumes:
       - ./data:/data
     ports:
-      - "8000:8000"
+      - "8123:8000"
     depends_on:
       - db
       - redis
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: harbor.autogame.ai/backend/fast-voice:${IMAGE_TAG:-dev_latest}
+    container_name: fast-voice-worker
     command: ["uv", "run", "celery", "-A", "app.tasks.celery_app:celery_app", "worker", "-l", "DEBUG", "-Q", "tts,clone"]
     environment:
       <<: *common-environment
-      AUTO_CREATE_DB: false
-      ADMIN_BOOTSTRAP: false
+      AUTO_CREATE_DB: "false"
+      ADMIN_BOOTSTRAP: "false"
     volumes:
       - ./data:/data
     depends_on:
@@ -49,8 +47,9 @@ services:
       - redis
   db:
     image: postgres:16
+    container_name: fast-voice-pg
     ports:
-      - "5432:5432"
+      - "5454:5432"
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
@@ -60,8 +59,9 @@ services:
       - fast_voice_db:/var/lib/postgresql/data
   redis:
     image: redis:7
-    ports:
-      - "6379:6379"
+    container_name: fast-voice-redis
+#    ports:
+#      - "6381:6379"
 
 volumes:
   fast_voice_db:
