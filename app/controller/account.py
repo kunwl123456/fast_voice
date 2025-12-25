@@ -106,6 +106,11 @@ async def register_user(
     )
     db.add(u)
     await db.flush()
+    
+    # 如果未提供昵称，生成默认昵称：用户_{uuid前6位}
+    if not display_name or display_name.strip() == "":
+        u.display_name = f"用户_{u.uuid[:6]}"
+        db.add(u)
 
     # 创建积分账户并赠送免费版初始积分
     acc = CreditAccount(user_id=u.id, balance=settings.register_free_point)
