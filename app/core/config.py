@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     max_text_utf8_bytes: int = 4000
     register_free_point: int = 10000000  # 注册赠送积分（默认1000万）
 
+    # 音频文件上传限制
+    max_audio_file_size_mb: int = 32  # 最大 32MB
+    max_audio_file_size_bytes: int = 32 * 1024 * 1024  # 33554432 字节
+    supported_audio_formats: list[str] = [".mp3", ".wav", ".m4a"]
+
     auto_create_db: bool = True
     admin_bootstrap: bool = True
     data_dir: str = "./data"

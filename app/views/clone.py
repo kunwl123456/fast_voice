@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import aiofiles
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +26,7 @@ from app.deps import (
 )
 from app.schemas import CloneCreateOut, CloneJobOut, Response
 from app.services.idempotency import get_idempotency, set_idempotency
-from app.services.storage import job_dir, save_bytes, to_public_file_url
+from app.services.storage import job_dir, to_public_file_url
 
 console_router = APIRouter(prefix="/console", tags=["音色克隆"])
 openapi_router = APIRouter(prefix="/openapi", tags=["音色克隆"])
@@ -55,6 +56,44 @@ def _clone_out(job: CloneJob, user_uuid: str) -> CloneJobOut:
         preview_audio_url=preview_url,
         result_voice_uuid=job.result_voice_uuid,
     )
+
+
+def _validate_audio_file(file: UploadFile) -> tuple[bool, str]:
+    """验证音频文件格式和大小"""
+    # 验证文件名
+    if not file.filename:
+        return False, "文件名不能为空"
+    
+    # 验证文件格式
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext not in settings.supported_audio_formats:
+        return False, f"不支持的文件格式，仅支持：{', '.join(settings.supported_audio_formats)}"
+    
+    # 验证文件大小（通过 Content-Length 头）
+    if file.size and file.size > settings.max_audio_file_size_bytes:
+        return False, f"文件大小超过限制（最大 {settings.max_audio_file_size_mb}MB）"
+    
+    return True, ""
+
+
+async def _save_upload_file_async(file: UploadFile, dest_path: str) -> None:
+    """异步流式保存上传文件，避免阻塞事件循环"""
+    # 确保目录存在
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    
+    # 流式保存，同时检查文件大小
+    total_size = 0
+    async with aiofiles.open(dest_path, 'wb') as out:
+        while chunk := await file.read(8192):  # 每次读取 8KB
+            total_size += len(chunk)
+            # 再次验证文件大小（防止客户端伪造 Content-Length）
+            if total_size > settings.max_audio_file_size_bytes:
+                # 删除已保存的部分文件
+                await out.close()
+                if os.path.exists(dest_path):
+                    os.remove(dest_path)
+                raise ValueError(f"文件大小超过限制（最大 {settings.max_audio_file_size_mb}MB）")
+            await out.write(chunk)
 
 
 async def _create_clone_job(
@@ -95,10 +134,15 @@ async def console_create_clone(
     tags: str = Form("[]"),  # JSON 字符串数组
     is_public: bool = Form(False),
     remove_background_noise: bool = Form(False),
-    files: list[UploadFile] = File(...),
+    audio_file: UploadFile = File(...),  # 单个音频文件
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
+    # 验证音频文件
+    is_valid, error_msg = _validate_audio_file(audio_file)
+    if not is_valid:
+        return bad_request_response(error_msg)
+
     # 解析标签
     try:
         tags_list = json.loads(tags) if tags else []
@@ -122,9 +166,17 @@ async def console_create_clone(
     )
     await db.flush()  # 确保 UUID 已生成
     ds_dir = job_dir("clone_dataset", user_id=user.id, job_uuid=job.uuid)
-    for f in files:
-        content = f.file.read()
-        save_bytes(os.path.join(ds_dir, f.filename or "audio.bin"), content)
+    
+    # 异步流式保存文件，避免阻塞事件循环
+    dest_path = os.path.join(ds_dir, audio_file.filename or "audio.bin")
+    try:
+        await _save_upload_file_async(audio_file, dest_path)
+    except ValueError as e:
+        # 文件大小超限，删除任务
+        await db.delete(job)
+        await db.commit()
+        return bad_request_response(str(e))
+    
     job.dataset_dir = ds_dir
     db.add(job)
     # 异步：如果没有 celery broker，开发时允许直接同步跑
@@ -184,11 +236,15 @@ async def openapi_create_clone(
     tags: str = Form("[]"),  # JSON 字符串数组
     is_public: bool = Form(False),
     remove_background_noise: bool = Form(False),
-    files: list[UploadFile] = File(...),
+    audio_file: UploadFile = File(...),  # 单个音频文件
     db: AsyncSession = Depends(get_db),
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
 ):
+    # 验证音频文件
+    is_valid, error_msg = _validate_audio_file(audio_file)
+    if not is_valid:
+        return bad_request_response(error_msg)
 
     # 解析标签
     try:
@@ -226,9 +282,17 @@ async def openapi_create_clone(
     )
     await db.flush()  # 确保 UUID 已生成
     ds_dir = job_dir("clone_dataset", user_id=principal.user.id, job_uuid=job.uuid)
-    for f in files:
-        content = f.file.read()
-        save_bytes(os.path.join(ds_dir, f.filename or "audio.bin"), content)
+    
+    # 异步流式保存文件，避免阻塞事件循环
+    dest_path = os.path.join(ds_dir, audio_file.filename or "audio.bin")
+    try:
+        await _save_upload_file_async(audio_file, dest_path)
+    except ValueError as e:
+        # 文件大小超限，删除任务
+        await db.delete(job)
+        await db.commit()
+        return bad_request_response(str(e))
+    
     job.dataset_dir = ds_dir
     db.add(job)
     set_idempotency(
