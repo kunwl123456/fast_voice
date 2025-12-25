@@ -46,20 +46,18 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
     用户注册接口
 
     ### 功能说明
+    - 验证邀请码是否有效
     - 验证邮箱是否已被注册
     - 创建新用户账号
     - 自动创建积分账户
     - 赠送免费版初始积分
-
-    ### 注册流程
-    1. 检查邮箱是否已存在
-    2. 创建用户记录（默认为免费版订阅）
-    3. 创建积分账户（初始积分根据系统配置）
-    4. 记录积分流水
-    5. 返回用户基本信息
     """
     u, error = await register_user(
-        db, payload.email, payload.password, payload.display_name
+        db,
+        str(payload.email),
+        payload.password,
+        payload.display_name,
+        payload.invite_code,
     )
     if error:
         return conflict_response(error, {"email": payload.email})
@@ -75,14 +73,8 @@ async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
 
     ### 功能说明
     - 验证用户邮箱和密码
-    - 生成访问令牌（JWT Token）
+    - 生成访问令牌
     - 返回 Bearer Token 用于后续 API 调用
-
-    ### 登录流程
-    1. 根据邮箱查找用户
-    2. 验证密码是否正确
-    3. 生成访问令牌（包含用户标识）
-    4. 返回 Token
 
     ### 使用说明
     获取 Token 后，在后续请求的 Header 中添加：
@@ -90,7 +82,7 @@ async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
     Authorization: Bearer {access_token}
     ```
     """
-    token, error = await login_user(db, payload.email, payload.password)
+    token, error = await login_user(db, str(payload.email), payload.password)
     if error:
         return unauthorized_response(error)
 

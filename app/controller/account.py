@@ -9,11 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models import CreditAccount, CreditTransaction, SubscriptionPlan, TxType, User
 from app.schemas import MeOut, RegisterOut
 from app.services.billing import get_or_create_account
 from app.core.security import create_access_token, hash_password, verify_password
 from app.services.storage import data_dir, ensure_dir, save_bytes, to_public_file_url
+from app.models import CreditAccount, CreditTransaction, SubscriptionPlan, TxType, User
+from app.core.constants import DEFAULT_SUBSCRIPTION_PLAN
 
 
 async def build_user_response(db: AsyncSession, user: User) -> MeOut:
@@ -76,7 +77,7 @@ async def build_register_response(db: AsyncSession, user: User) -> RegisterOut:
 
 
 async def register_user(
-    db: AsyncSession, email: str, password: str, display_name: str
+    db: AsyncSession, email: str, password: str, display_name: str, invite_code: str
 ) -> tuple[User | None, str]:
     """
     用户注册业务逻辑
@@ -86,10 +87,38 @@ async def register_user(
     - email: 邮箱
     - password: 密码
     - display_name: 显示名称
+    - invite_code: 邀请码
+
+    ### 注册流程
+    1. 验证邀请码（是否存在、是否已使用、是否过期）
+    2. 检查邮箱是否已存在
+    3. 创建用户记录（默认为免费版订阅）
+    4. 标记邀请码为已使用
+    5. 创建积分账户（初始积分根据系统配置）
+    6. 记录积分流水
+    7. 返回用户基本信息
 
     ### 返回
     - (用户对象, 错误信息)，如果注册成功则错误信息为空字符串
     """
+    from app.models import InviteCode, format_timezone
+
+    # 验证邀请码
+    invite = (
+        await db.execute(
+            select(InviteCode).where(
+                InviteCode.code == invite_code, InviteCode.is_used == False
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not invite:
+        return None, "邀请码不存在或已被使用"
+
+    # 检查邀请码是否过期
+    if invite.expires_at and invite.expires_at < format_timezone():
+        return None, "邀请码已过期"
+
     # 检查邮箱是否已存在
     existed = (
         await db.execute(select(User).where(User.email == email))
@@ -102,15 +131,21 @@ async def register_user(
         email=email,
         password_hash=hash_password(password),
         display_name=display_name,
-        subscription_plan=SubscriptionPlan.free,
+        subscription_plan=SubscriptionPlan(DEFAULT_SUBSCRIPTION_PLAN),
     )
     db.add(u)
     await db.flush()
-    
+
     # 如果未提供昵称，生成默认昵称：用户_{uuid前6位}
     if not display_name or display_name.strip() == "":
         u.display_name = f"用户_{u.uuid[:6]}"
         db.add(u)
+
+    # 标记邀请码为已使用
+    invite.is_used = True
+    invite.used_by_user_id = u.id
+    invite.used_at = format_timezone()
+    db.add(invite)
 
     # 创建积分账户并赠送免费版初始积分
     acc = CreditAccount(user_id=u.id, balance=settings.register_free_point)
@@ -140,11 +175,17 @@ async def login_user(db: AsyncSession, email: str, password: str) -> tuple[str, 
     - email: 邮箱
     - password: 密码
 
+    ### 登录流程
+    1. 根据邮箱查找用户
+    2. 验证密码是否正确
+    3. 生成访问令牌（包含用户标识）
+    4. 返回 Token
+
     ### 返回
     - (访问令牌, 错误信息)，如果登录成功则错误信息为空字符串
     """
     u = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
-    if not u or not verify_password(password, u.password_hash):
+    if not u or not verify_password(password, str(u.password_hash)):
         return "", "用户名或密码错误"
 
     token = create_access_token(subject=f"user:{u.uuid}")
