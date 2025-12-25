@@ -14,6 +14,7 @@ from app.models import CloneJob, JobStatus, TTSJob, Voice, format_timezone
 from app.services.billing_sync import refund
 from app.services.storage import job_dir
 from app.tasks.celery_app import celery_app
+from app.services.redis_pubsub_sync import RedisPubSubSync
 
 logger = get_task_logger(__name__)
 
@@ -82,6 +83,9 @@ def run_tts_job(job_id: int) -> None:
         top_k = job.top_k or 5
         top_p = job.top_p or 1.0
         webhook_url = job.webhook_url or ""
+    
+    # 🚀 发布状态更新：running
+    RedisPubSubSync.publish_job_status("tts", job_uuid, "running")
 
     try:
         out_dir = job_dir("tts", user_id=user_id, job_uuid=job_uuid)
@@ -157,6 +161,9 @@ def run_tts_job(job_id: int) -> None:
 
             db.commit()
 
+        # 🚀 发布状态更新：succeeded
+        RedisPubSubSync.publish_job_status("tts", job_uuid, "succeeded")
+
         # 调用 webhook 回调（成功）
         if webhook_url:
             from app.services.storage import to_public_file_url
@@ -197,6 +204,9 @@ def run_tts_job(job_id: int) -> None:
             )
             db.commit()
 
+        # 🚀 发布状态更新：failed
+        RedisPubSubSync.publish_job_status("tts", job_uuid_failed, "failed")
+
         # 调用 webhook 回调（失败）
         if webhook_url_failed:
             _call_webhook(
@@ -222,6 +232,11 @@ def run_clone_job(job_id: int) -> None:
         job.status = JobStatus.running
         job.updated_at = format_timezone()
         db.commit()
+        # 提前读取 job_uuid
+        job_uuid = job.uuid
+    
+    # 🚀 发布状态更新：running
+    RedisPubSubSync.publish_job_status("clone", job_uuid, "running")
 
     try:
         # 可选：调用外部语音服务做特征提取 / 生成 voice（不改变原有落库逻辑）
@@ -291,6 +306,9 @@ def run_clone_job(job_id: int) -> None:
             job.status = JobStatus.succeeded
             job.updated_at = format_timezone()
             db.commit()
+        
+        # 🚀 发布状态更新：succeeded
+        RedisPubSubSync.publish_job_status("clone", job_uuid, "succeeded")
     except Exception as e:
         logger.exception("clone job failed: %s", e)
         with SessionLocalSync() as db:
@@ -303,3 +321,8 @@ def run_clone_job(job_id: int) -> None:
             job.error = "clone_failed"
             job.updated_at = format_timezone()
             db.commit()
+            # 读取 job_uuid 用于发布
+            job_uuid_failed = job.uuid
+        
+        # 🚀 发布状态更新：failed
+        RedisPubSubSync.publish_job_status("clone", job_uuid_failed, "failed")
