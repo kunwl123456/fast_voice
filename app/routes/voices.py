@@ -124,8 +124,32 @@ async def rename_voice(
 
 @console_router.get("/voices/official")
 @openapi_router.get("/voices/official")
-async def official_voices(db: AsyncSession = Depends(get_db)):
-    """获取官方音色列表（autogame账号创建的音色）"""
+async def official_voices(
+    db: AsyncSession = Depends(get_db),
+    tags: list[str] = Query(None, description="标签筛选，可传递多个标签"),
+    limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
+    offset: int = Query(0, ge=0, description="偏移量，用于分页"),
+    orderBy: str = Query("createdAt", description="排序字段: likes(点赞), usage(使用次数), chars(生成字符数), createdAt(创建时间)"),
+):
+    """
+    获取官方音色列表（autogame账号创建的音色）- 支持标签筛选、分页和多维度排序
+    
+    参数：
+    - tags: 标签筛选（可选），支持多个标签，满足任一标签即返回
+    - limit: 每页返回数量，默认20，最大100
+    - offset: 偏移量，用于滚动加载更多数据
+    - orderBy: 排序方式
+      * likes - 按点赞数降序
+      * usage - 按使用次数降序
+      * chars - 按生成字符数降序
+      * createdAt - 按创建时间降序（默认）
+    
+    示例：
+    - /voices/official - 首次加载，按创建时间排序
+    - /voices/official?tags=中文&tags=女 - 标签筛选
+    - /voices/official?orderBy=likes&limit=20&offset=0 - 按点赞数排序
+    - /voices/official?tags=青年&orderBy=usage&offset=20 - 标签筛选 + 按使用次数排序
+    """
     # 先找到 autogame 用户
     autogame_user = (
         await db.execute(select(User).where(User.email == "admin@autogame.ai"))
@@ -135,19 +159,46 @@ async def official_voices(db: AsyncSession = Depends(get_db)):
         # 如果找不到官方账号，返回空列表
         return success_response("获取成功", [])
 
-    # 查询该用户创建的所有音色
-    voices = (
-        (
-            await db.execute(
-                select(Voice)
-                .where(Voice.owner_user_id == autogame_user.id)
-                .order_by(Voice.id.desc())
-                .limit(200)
+    # 构建基础查询
+    query = select(Voice).where(Voice.owner_user_id == autogame_user.id)
+    
+    # 如果指定了标签，进行筛选
+    if tags:
+        # 对于 JSON 类型的标签字段，检查是否包含任一指定标签
+        from sqlalchemy import or_, cast, String, Text
+        from sqlalchemy.dialects.postgresql import JSONB
+        
+        # 为每个标签创建一个条件：Voice.tags 包含该标签
+        conditions = []
+        for tag in tags:
+            # PostgreSQL: 使用 @> 操作符检查 JSON 数组是否包含元素
+            # 格式: tags @> '["tag_value"]'
+            conditions.append(
+                cast(Voice.tags, JSONB).contains([tag])
             )
-        )
-        .scalars()
-        .all()
-    )
+        
+        # 使用 OR 连接所有条件（满足任一标签即可）
+        if conditions:
+            query = query.where(or_(*conditions))
+    
+    # 根据 orderBy 参数选择排序方式
+    if orderBy == "likes":
+        # 按点赞数降序，点赞数相同则按 ID 降序
+        query = query.order_by(Voice.likes_count.desc(), Voice.id.desc())
+    elif orderBy == "usage":
+        # 按使用次数降序
+        query = query.order_by(Voice.usage_count.desc(), Voice.id.desc())
+    elif orderBy == "chars":
+        # 按生成字符数降序
+        query = query.order_by(Voice.generated_chars_count.desc(), Voice.id.desc())
+    else:  # 默认按创建时间（ID）降序
+        query = query.order_by(Voice.id.desc())
+    
+    # 应用分页
+    query = query.limit(limit).offset(offset)
+
+    # 执行查询
+    voices = (await db.execute(query)).scalars().all()
 
     voices_data = [_voice_out(v).model_dump() for v in voices]
     return success_response("获取成功", voices_data)
@@ -165,19 +216,28 @@ async def get_voice_tags():
 async def public_voices(
     db: AsyncSession = Depends(get_db),
     tags: list[str] = Query(None, description="标签筛选，可传递多个标签"),
-    limit: int = Query(200, ge=1, le=500, description="返回数量限制"),
+    limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
+    offset: int = Query(0, ge=0, description="偏移量，用于分页"),
+    orderBy: str = Query("createdAt", description="排序字段: likes(点赞), usage(使用次数), chars(生成字符数), createdAt(创建时间)"),
 ):
     """
-    获取公共音色列表
+    获取公共音色列表（社区角色市场）- 支持分页和多维度排序
     
     参数：
     - tags: 标签筛选（可选），支持多个标签，满足任一标签即返回
-    - limit: 返回数量限制，默认200，最大500
+    - limit: 每页返回数量，默认20，最大100
+    - offset: 偏移量，用于滚动加载更多数据
+    - orderBy: 排序方式
+      * likes - 按点赞数降序
+      * usage - 按使用次数降序
+      * chars - 按生成字符数降序
+      * createdAt - 按创建时间降序（默认）
     
     示例：
-    - /voices/public
-    - /voices/public?tags=中文&tags=女
-    - /voices/public?tags=青年&limit=50
+    - /voices/public - 首次加载，按创建时间排序
+    - /voices/public?tags=中文&tags=女 - 标签筛选
+    - /voices/public?orderBy=likes&limit=20&offset=0 - 按点赞数排序
+    - /voices/public?orderBy=usage&offset=20 - 按使用次数，加载第二页
     """
     query = select(Voice).where(Voice.is_public.is_(True))
     
@@ -200,7 +260,21 @@ async def public_voices(
         if conditions:
             query = query.where(or_(*conditions))
     
-    query = query.order_by(Voice.id.desc()).limit(limit)
+    # 根据 orderBy 参数选择排序方式
+    if orderBy == "likes":
+        # 按点赞数降序，点赞数相同则按 ID 降序
+        query = query.order_by(Voice.likes_count.desc(), Voice.id.desc())
+    elif orderBy == "usage":
+        # 按使用次数降序
+        query = query.order_by(Voice.usage_count.desc(), Voice.id.desc())
+    elif orderBy == "chars":
+        # 按生成字符数降序
+        query = query.order_by(Voice.generated_chars_count.desc(), Voice.id.desc())
+    else:  # 默认按创建时间（ID）降序
+        query = query.order_by(Voice.id.desc())
+    
+    # 应用分页
+    query = query.limit(limit).offset(offset)
     
     voices = (await db.execute(query)).scalars().all()
 
