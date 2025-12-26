@@ -9,6 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import InviteCode, User, format_timezone
+from app.core.error_codes import CommonError, InviteCodeError
+from app.core.exceptions import (
+    BadRequestException,
+    NotFoundException,
+    PermissionException,
+)
 
 
 def generate_invite_code() -> str:
@@ -27,7 +33,7 @@ async def create_invite_codes(
     count: int = 1,
     expires_days: int | None = None,
     note: str = "",
-) -> tuple[list[str], str]:
+) -> list[str]:
     """
     批量创建邀请码
 
@@ -39,10 +45,15 @@ async def create_invite_codes(
     - note: 备注说明
 
     ### 返回
-    - (邀请码列表, 错误信息)
+    - 邀请码列表
+
+    ### 异常
+    - PermissionException: 非管理员用户
     """
     if not admin_user.is_admin:
-        return [], "仅管理员可以生成邀请码"
+        raise PermissionException(
+            message="仅管理员可以生成邀请码", error=CommonError.FORBIDDEN
+        )
 
     codes = []
     expires_at = None
@@ -61,7 +72,7 @@ async def create_invite_codes(
         codes.append(code)
 
     await db.flush()
-    return codes, ""
+    return codes
 
 
 async def get_invite_codes(
@@ -87,9 +98,7 @@ async def get_invite_codes(
     return list(result.scalars().all())
 
 
-async def delete_invite_code(
-    db: AsyncSession, admin_user: User, code_id: int
-) -> tuple[bool, str]:
+async def delete_invite_code(db: AsyncSession, admin_user: User, code_id: int) -> None:
     """
     删除邀请码
 
@@ -98,22 +107,25 @@ async def delete_invite_code(
     - admin_user: 管理员用户对象
     - code_id: 邀请码 ID
 
-    ### 返回
-    - (是否成功, 错误信息)
+    ### 异常
+    - PermissionException: 非管理员用户
+    - NotFoundException: 邀请码不存在
+    - BadRequestException: 邀请码已被使用
     """
     if not admin_user.is_admin:
-        return False, "仅管理员可以删除邀请码"
+        raise PermissionException(
+            message="仅管理员可以删除邀请码", error=CommonError.FORBIDDEN
+        )
 
     invite = (
         await db.execute(select(InviteCode).where(InviteCode.id == code_id))
     ).scalar_one_or_none()
 
     if not invite:
-        return False, "邀请码不存在"
+        raise NotFoundException(error=InviteCodeError.INVITE_CODE_NOT_FOUND)
 
     if invite.is_used:
-        return False, "已使用的邀请码不能删除"
+        raise BadRequestException(error=InviteCodeError.INVITE_CODE_USED)
 
     await db.delete(invite)
     await db.flush()
-    return True, ""

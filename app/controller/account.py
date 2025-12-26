@@ -15,6 +15,13 @@ from app.services.billing import get_or_create_account
 from app.core.constants import DEFAULT_SUBSCRIPTION_PLAN, SUBSCRIPTION_PLANS
 from app.core.security import create_access_token, hash_password, verify_password
 from app.services.storage import data_dir, ensure_dir, save_bytes, to_public_file_url
+from app.core.error_codes import AccountError, InviteCodeError
+from app.core.exceptions import (
+    AuthenticationException,
+    BadRequestException,
+    ConflictException,
+    NotFoundException,
+)
 from app.core.models import (
     CreditAccount,
     CreditTransaction,
@@ -74,9 +81,7 @@ async def build_login_response(
     )
 
 
-async def validate_invite_code(
-    db: AsyncSession, invite_code: str
-) -> tuple[object | None, str]:
+async def validate_invite_code(db: AsyncSession, invite_code: str) -> object:
     """
     验证邀请码是否有效
 
@@ -90,9 +95,11 @@ async def validate_invite_code(
     - invite_code: 邀请码
 
     ### 返回
-    - (邀请码对象/特殊标记, 错误信息)
-    - 如果验证成功，错误信息为空字符串
-    - 对于测试邀请码，返回 "TEST" 字符串作为特殊标记
+    - 邀请码对象（对于测试邀请码，返回 "TEST" 字符串）
+
+    ### 异常
+    - NotFoundException: 邀请码不存在或已被使用
+    - BadRequestException: 邀请码已过期
 
     ### 测试用法
     使用配置的测试邀请码（默认: TEST-INVITE-CODE-2024）可以绕过数据库验证
@@ -101,7 +108,7 @@ async def validate_invite_code(
 
     # 检查是否为特殊测试邀请码
     if invite_code == settings.test_invite_code:
-        return "TEST", ""  # 返回特殊标记，表示是测试邀请码
+        return "TEST"  # 返回特殊标记，表示是测试邀请码
 
     # 验证邀请码
     invite = (
@@ -113,18 +120,18 @@ async def validate_invite_code(
     ).scalar_one_or_none()
 
     if not invite:
-        return None, "邀请码不存在或已被使用"
+        raise NotFoundException(error=InviteCodeError.INVITE_CODE_NOT_FOUND)
 
     # 检查邀请码是否过期
     if invite.expires_at and invite.expires_at < format_timezone():
-        return None, "邀请码已过期"
+        raise BadRequestException(error=InviteCodeError.INVITE_CODE_EXPIRED)
 
-    return invite, ""
+    return invite
 
 
 async def register_user(
     db: AsyncSession, email: str, password: str, display_name: str, invite_code: str
-) -> tuple[User | None, str]:
+) -> User:
     """
     用户注册业务逻辑
 
@@ -145,21 +152,24 @@ async def register_user(
     7. 返回用户基本信息
 
     ### 返回
-    - (用户对象, 错误信息)，如果注册成功则错误信息为空字符串
+    - 用户对象
+
+    ### 异常
+    - NotFoundException: 邀请码不存在或已被使用
+    - BadRequestException: 邀请码已过期
+    - ConflictException: 邮箱已被注册
     """
     from app.core.models import format_timezone
 
-    # 验证邀请码
-    invite, error = await validate_invite_code(db, invite_code)
-    if error:
-        return None, error
+    # 验证邀请码（如有问题会抛出异常）
+    invite = await validate_invite_code(db, invite_code)
 
     # 检查邮箱是否已存在
     existed = (
         await db.execute(select(User).where(User.email == email))
     ).scalar_one_or_none()
     if existed:
-        return None, "该邮箱已被注册"
+        raise ConflictException(error=AccountError.EMAIL_EXISTS)
 
     # 创建用户
     u = User(
@@ -200,12 +210,10 @@ async def register_user(
     )
     db.add(tx)
 
-    return u, ""
+    return u
 
 
-async def login_user(
-    db: AsyncSession, email: str, password: str
-) -> tuple[str, str, User | None]:
+async def login_user(db: AsyncSession, email: str, password: str) -> tuple[str, User]:
     """
     用户登录业务逻辑
 
@@ -221,14 +229,17 @@ async def login_user(
     4. 返回 Token
 
     ### 返回
-    - (访问令牌, 错误信息)，如果登录成功则错误信息为空字符串
+    - (访问令牌, 用户对象)
+
+    ### 异常
+    - AuthenticationException: 用户名或密码错误
     """
     u = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if not u or not verify_password(password, str(u.password_hash)):
-        return "", "用户名或密码错误", None
+        raise AuthenticationException(error=AccountError.LOGIN_FAILED)
 
     token = create_access_token(subject=f"user:{u.uuid}")
-    return token, "", u
+    return token, u
 
 
 async def upload_user_avatar(
@@ -263,7 +274,7 @@ async def upload_user_avatar(
 
 async def change_user_password(
     db: AsyncSession, user: User, old_password: str, new_password: str
-) -> tuple[bool, str]:
+) -> None:
     """
     修改用户密码
 
@@ -273,20 +284,18 @@ async def change_user_password(
     - old_password: 原密码
     - new_password: 新密码
 
-    ### 返回
-    - (是否成功, 错误信息)
+    ### 异常
+    - AuthenticationException: 原密码错误
     """
     if not verify_password(old_password, user.password_hash):
-        return False, "原密码错误"
+        raise AuthenticationException(error=AccountError.OLD_PASSWORD_WRONG)
 
     await update_user_field(db, user, "password_hash", hash_password(new_password))
-
-    return True, ""
 
 
 def validate_avatar_file(
     content_type: str | None, filename: str | None, content: bytes
-) -> tuple[bool, str, str]:
+) -> str:
     """
     验证头像文件
 
@@ -296,24 +305,32 @@ def validate_avatar_file(
     - content: 文件内容
 
     ### 返回
-    - (是否有效, 错误信息, 文件扩展名)
+    - 文件扩展名
+
+    ### 异常
+    - BadRequestException: 文件格式不支持或文件过大
     """
     # 验证文件类型
     if not content_type or not content_type.startswith("image/"):
-        return False, "只支持图片格式", ""
+        raise BadRequestException(error=AccountError.AVATAR_FORMAT_ERROR)
 
     # 支持的图片扩展名
     allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
     file_ext = Path(filename or "").suffix.lower()
 
     if file_ext not in allowed_extensions:
-        return False, f"不支持的图片格式，仅支持：{', '.join(allowed_extensions)}", ""
+        raise BadRequestException(
+            message=f"不支持的图片格式，仅支持：{', '.join(allowed_extensions)}",
+            error=AccountError.AVATAR_FORMAT_ERROR,
+        )
 
     # 验证大小（5MB限制）
     if len(content) > 5 * 1024 * 1024:
-        return False, "图片文件不能超过5MB", ""
+        raise BadRequestException(error=AccountError.AVATAR_SIZE_ERROR)
 
     if len(content) == 0:
-        return False, "文件内容为空", ""
+        raise BadRequestException(
+            message="文件内容为空", error=AccountError.AVATAR_FORMAT_ERROR
+        )
 
-    return True, "", file_ext
+    return file_ext

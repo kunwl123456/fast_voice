@@ -6,30 +6,31 @@ import time
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.responses import JSONResponse, StreamingResponse
+from starlette.responses import StreamingResponse
 from fastapi import APIRouter, Depends, Header, Request
 
-from app.core.responses import (
-    success_response,
-    not_found_response,
-    bad_request_response,
-    forbidden_response,
-)
 from app.services.kv import KV
 from app.core.config import settings
 from app.tasks.jobs import run_tts_job
+from app.core.responses import success_response
+from app.services.redis_pubsub import RedisPubSub
 from app.services.storage import to_public_file_url
 from app.core.models import JobStatus, TTSJob, User, CloneJob, Voice
 from app.core.schemas import JobOut, TTSJobOut, TTSCreatIn, Response
 from app.services.idempotency import get_idempotency, set_idempotency
+from app.core.error_codes import TTSError, VoiceError, CloneError, CreditError
 from app.services.billing import calc_cost, ensure_sufficient_and_consume, utf8_bytes
+from app.core.exceptions import (
+    BadRequestException,
+    NotFoundException,
+    PermissionException,
+)
 from app.core.deps import (
     get_db,
     OpenAPIPrincipal,
     require_console_user,
     require_openapi_principal,
 )
-from app.services.redis_pubsub import RedisPubSub
 
 
 console_router = APIRouter(prefix="/console", tags=["TTS"])
@@ -55,14 +56,13 @@ def _tts_out(job: TTSJob) -> TTSJobOut:
     )
 
 
-async def _create_job(
-    db: AsyncSession, user_id: int, payload: TTSCreatIn
-) -> TTSJob | JSONResponse | None:
-    """创建TTS任务，如果失败返回错误响应"""
+async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TTSJob:
+    """创建TTS任务，失败时抛出异常"""
     b = utf8_bytes(payload.text)
     if b > settings.max_text_utf8_bytes:
-        return bad_request_response(
-            "文本过长", {"max_bytes": settings.max_text_utf8_bytes, "current_bytes": b}
+        raise BadRequestException(
+            error=TTSError.TEXT_TOO_LONG,
+            data={"max_bytes": settings.max_text_utf8_bytes, "current_bytes": b},
         )
 
     # 根据 clone_job_id 查找对应的克隆任务
@@ -76,14 +76,16 @@ async def _create_job(
     ).scalar_one_or_none()
 
     if not clone_job:
-        return not_found_response(
-            "克隆任务不存在", {"clone_job_id": payload.clone_job_id}
+        raise NotFoundException(
+            error=CloneError.CLONE_NOT_FOUND,
+            data={"clone_job_id": payload.clone_job_id},
         )
 
     if clone_job.status != JobStatus.succeeded:
-        return bad_request_response(
-            "克隆任务未完成",
-            {
+        raise BadRequestException(
+            message="克隆任务未完成",
+            error=TTSError.INVALID_TTS_PARAMS,
+            data={
                 "clone_job_id": payload.clone_job_id,
                 "current_status": clone_job.status.value,
                 "message": "请等待克隆任务完成后再创建 TTS 任务",
@@ -91,9 +93,10 @@ async def _create_job(
         )
 
     if not clone_job.result_voice_uuid:
-        return bad_request_response(
-            "克隆任务异常：未生成音色 UUID",
-            {"clone_job_id": payload.clone_job_id},
+        raise BadRequestException(
+            message="克隆任务异常：未生成音色 UUID",
+            error=TTSError.INVALID_TTS_PARAMS,
+            data={"clone_job_id": payload.clone_job_id},
         )
 
     # 使用克隆任务生成的音色 UUID
@@ -105,10 +108,16 @@ async def _create_job(
     ).scalar_one_or_none()
 
     if not voice:
-        return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
+        raise NotFoundException(
+            error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
+        )
 
     if voice.owner_user_id != user_id and not voice.is_public:
-        return forbidden_response("无权使用该音色", {"voice_uuid": voice_uuid})
+        raise PermissionException(
+            message="无权使用该音色",
+            error=VoiceError.VOICE_NOT_FOUND,
+            data={"voice_uuid": voice_uuid},
+        )
 
     speed_factor = payload.speed_factor if payload.speed_factor is not None else 1.0
     temperature = payload.temperature if payload.temperature is not None else 1.0
@@ -139,7 +148,10 @@ async def _create_job(
             db=db, user_id=user_id, amount=cost, ref_type="tts", ref_id=str(job.id)
         )
     except ValueError as e:
-        return bad_request_response("积分不足", {"required": cost, "error": str(e)})
+        raise BadRequestException(
+            error=CreditError.INSUFFICIENT_BALANCE,
+            data={"required": cost, "error": str(e)},
+        )
 
     return job
 
@@ -152,11 +164,9 @@ async def console_create_tts(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
-    result = await _create_job(db, user.id, payload)
-    if not isinstance(result, TTSJob):
-        return result  # 返回错误响应
+    # 创建任务（失败时抛出异常）
+    job = await _create_job(db, user.id, payload)
 
-    job = result
     await db.flush()  # 确保 UUID 已生成
     # 异步：如果没有 celery broker，开发时允许直接同步跑（方便联调）
     if settings.celery_broker_url:
@@ -186,7 +196,11 @@ async def console_get_tts(
         )
     ).scalar_one_or_none()
     if not job:
-        return not_found_response("任务不存在", {"job_uuid": job_uuid})
+        raise NotFoundException(
+            error=TTSError.INVALID_TTS_PARAMS,
+            message="任务不存在",
+            data={"job_uuid": job_uuid},
+        )
 
     tts_data = _tts_out(job)
     return success_response("获取成功", tts_data.model_dump())
@@ -210,11 +224,9 @@ async def openapi_create_tts(
         job_data = JobOut(id=existed, status="queued")
         return success_response("TTS 任务已存在（幂等）", job_data.model_dump())
 
-    result = await _create_job(db, principal.user.id, payload)
-    if not isinstance(result, TTSJob):
-        return result  # 返回错误响应
+    # 创建任务（失败时抛出异常）
+    job = await _create_job(db, principal.user.id, payload)
 
-    job = result
     await db.flush()  # 确保 UUID 已生成
     set_idempotency(
         kv,
@@ -250,7 +262,11 @@ async def openapi_get_tts(
         )
     ).scalar_one_or_none()
     if not job:
-        return not_found_response("任务不存在", {"job_uuid": job_uuid})
+        raise NotFoundException(
+            error=TTSError.INVALID_TTS_PARAMS,
+            message="任务不存在",
+            data={"job_uuid": job_uuid},
+        )
 
     tts_data = _tts_out(job)
     return success_response("获取成功", tts_data.model_dump())

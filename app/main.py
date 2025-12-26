@@ -10,18 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.models import *  # noqa: F401,F403 (ensure models imported for metadata)
 from app.core.openapi import setup_openapi, OPENAPI_DESCRIPTION
 from app.core.middlewares import OpenAPILoggingMiddleware
-from app.core.responses import (
-    server_error_response,
-    bad_request_response,
-    unauthorized_response,
-    forbidden_response,
-    not_found_response,
-)
-from app.core.exceptions import (
-    NotFoundException,
-    PermissionException,
-    AuthenticationException,
-)
+from app.core.responses import error_response
+from app.core.error_codes import CommonError
+from app.core.exceptions import AppException
 from app.core.config import settings
 from app.services.storage import ensure_dir
 from app.services.bootstrap import bootstrap_admin
@@ -38,6 +29,7 @@ from app.views.clone import console_router as clone_console_router
 from app.views.clone import openapi_router as clone_openapi_router
 from app.views.voices import console_router as voices_console_router
 from app.views.voices import openapi_router as voices_openapi_router
+from app.views.docs import router as docs_router
 
 
 app = FastAPI(
@@ -95,25 +87,18 @@ async def capture_raw_body(request: Request, call_next):
 @app.exception_handler(ValueError)
 async def value_error_handler(_: Request, exc: ValueError):
     """处理 ValueError 并返回统一格式"""
-    return bad_request_response(str(exc))
+    return error_response(CommonError.BAD_REQUEST, message=str(exc))
 
 
-@app.exception_handler(AuthenticationException)
-async def authentication_error_handler(_: Request, exc: AuthenticationException):
-    """处理 AuthenticationException 并返回统一格式"""
-    return unauthorized_response(str(exc))
+@app.exception_handler(AppException)
+async def app_exception_handler(_: Request, exc: AppException):
+    """
+    统一处理所有业务异常（AppException 及其子类）
 
-
-@app.exception_handler(PermissionException)
-async def permission_error_handler(_: Request, exc: PermissionException):
-    """处理 PermissionException 并返回统一格式"""
-    return forbidden_response(str(exc))
-
-
-@app.exception_handler(NotFoundException)
-async def notfound_error_handler(_: Request, exc: NotFoundException):
-    """处理 NotFoundException 并返回统一格式"""
-    return not_found_response(str(exc))
+    包括：AuthenticationException, PermissionException, NotFoundException,
+    BadRequestException, ConflictException, InternalServerException 等
+    """
+    return error_response(exc.error, message=exc.message, data=exc.data)
 
 
 @app.exception_handler(Exception)
@@ -132,11 +117,10 @@ async def general_exception_handler(_: Request, exc: Exception):
     # 生产环境不暴露详细错误（通过环境变量判断）
     is_dev = os.getenv("ENV", "production").lower() in ("development", "dev", "local")
 
-    # server_error_response 已经返回 JSONResponse，直接返回即可
     if is_dev:
-        return server_error_response("服务器内部错误", {"detail": str(exc)})
+        return error_response(CommonError.INTERNAL_ERROR, data={"detail": str(exc)})
     else:
-        return server_error_response("服务器内部错误")
+        return error_response(CommonError.INTERNAL_ERROR)
 
 
 async def init_db() -> None:
@@ -182,3 +166,4 @@ app.include_router(tts_console_router)
 app.include_router(tts_openapi_router)
 app.include_router(clone_console_router)
 app.include_router(clone_openapi_router)
+app.include_router(docs_router)

@@ -3,18 +3,20 @@ from typing import List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
-from app.core.responses import (
-    success_response,
-    not_found_response,
-    forbidden_response,
-)
+from app.core.responses import success_response
 from app.core.models import User, Voice
 from app.core.deps import get_db, require_console_user
 from app.services.storage import to_public_file_url
 from app.services.voice_tags import get_tag_categories, validate_tags
 from app.core.schemas import Response, VoiceOut, VoiceUpdateIn, VoiceRenameIn
+from app.core.error_codes import VoiceError
+from app.core.exceptions import (
+    BadRequestException,
+    NotFoundException,
+    PermissionException,
+)
 
 
 console_router = APIRouter(prefix="/console", tags=["声音管理"])
@@ -75,15 +77,21 @@ async def update_voice(
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
     if not v:
-        return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
+        raise NotFoundException(
+            error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
+        )
     if v.owner_user_id != user.id:
-        return forbidden_response("无权修改该音色")
+        raise PermissionException(
+            message="无权修改该音色", error=VoiceError.VOICE_NOT_FOUND
+        )
 
     # 验证并更新标签
     if payload.tags is not None:
         is_valid, error_msg = validate_tags(payload.tags)
         if not is_valid:
-            raise HTTPException(status_code=400, detail=error_msg)
+            raise BadRequestException(
+                message=error_msg, error=VoiceError.INVALID_VOICE_PARAMS
+            )
         v.tags = payload.tags
 
     if payload.description is not None:
@@ -113,9 +121,13 @@ async def rename_voice(
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
     if not v:
-        return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
+        raise NotFoundException(
+            error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
+        )
     if v.owner_user_id != user.id:
-        return forbidden_response("无权修改该音色")
+        raise PermissionException(
+            message="无权修改该音色", error=VoiceError.VOICE_NOT_FOUND
+        )
 
     # 更新音色名字
     v.name = payload.name
@@ -281,7 +293,9 @@ async def like_voice(
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
     if not v:
-        return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
+        raise NotFoundException(
+            error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
+        )
 
     # 增加点赞数
     v.likes_count += 1
@@ -304,7 +318,9 @@ async def unlike_voice(
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
     if not v:
-        return not_found_response("音色不存在", {"voice_uuid": voice_uuid})
+        raise NotFoundException(
+            error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
+        )
 
     # 减少点赞数（但不能小于0）
     if v.likes_count > 0:

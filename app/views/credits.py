@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import User
-from app.core.responses import success_response, not_found_response
+from app.core.responses import success_response
 from app.core.deps import get_db, require_admin, require_console_user
 from app.controller.credits import (
     get_user_credit_balance,
@@ -118,10 +118,9 @@ async def recharge_credits(
     ### 安全提示
     充值操作会被记录在积分流水中，可追溯审计。
     """
-    recharge_user, result = await recharge_user_credits(
+    # 为用户充值（如用户不存在会抛出异常）
+    result = await recharge_user_credits(
         db, payload.user_id, payload.amount, payload.note
     )
-    if not recharge_user:
-        return not_found_response("用户未找到", {"user_id": payload.user_id})
 
     return success_response("充值成功", result)

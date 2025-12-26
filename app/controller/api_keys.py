@@ -11,6 +11,8 @@ from app.core.models import ApiKey, User
 from app.core.security import generate_api_key
 from app.core.schemas import ApiKeyListItem, ApiKeyOut
 from app.core.constants import SubscriptionPlanType
+from app.core.error_codes import ApiKeyError
+from app.core.exceptions import NotFoundException, PermissionException
 
 
 def _mask_api_key(api_key: str) -> str:
@@ -90,9 +92,7 @@ async def create_user_api_key(
     return ApiKeyOut(api_key=api_key_value, expires_at=expires_at)
 
 
-async def delete_user_api_key(
-    db: AsyncSession, user: User, key_id: int
-) -> ApiKey | None:
+async def delete_user_api_key(db: AsyncSession, user: User, key_id: int) -> ApiKey:
     """
     删除用户的 API Key
 
@@ -102,7 +102,10 @@ async def delete_user_api_key(
     - key_id: API Key ID
 
     ### 返回
-    - 被删除的 API Key 对象，如果不存在则返回 None
+    - 被删除的 API Key 对象
+
+    ### 异常
+    - NotFoundException: API Key 不存在
     """
     key = (
         await db.execute(
@@ -111,7 +114,7 @@ async def delete_user_api_key(
     ).scalar_one_or_none()
 
     if not key:
-        return None
+        raise NotFoundException(error=ApiKeyError.API_KEY_NOT_FOUND)
 
     await db.delete(key)
     await db.flush()
@@ -164,14 +167,15 @@ async def rotate_user_api_key(
     return ApiKeyOut(api_key=api_key_value, expires_at=expires_at)
 
 
-def check_enterprise_permission(user: User) -> bool:
+def check_enterprise_permission(user: User) -> None:
     """
     检查用户是否有企业版权限
 
     ### 参数
     - user: 用户对象
 
-    ### 返回
-    - 是否有企业版权限
+    ### 异常
+    - PermissionException: 用户没有企业版权限
     """
-    return bool(user.subscription_plan.value == SubscriptionPlanType.enterprise.value)
+    if user.subscription_plan.value != SubscriptionPlanType.enterprise.value:
+        raise PermissionException(error=ApiKeyError.API_ACCESS_DENIED)

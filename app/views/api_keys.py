@@ -8,12 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.models import User
 from app.core.deps import get_db, require_console_user
 from app.core.schemas import Response, ApiKeyListItem, ApiKeyOut, CreateApiKeyIn
-from app.core.responses import (
-    success_response,
-    created_response,
-    forbidden_response,
-    not_found_response,
-)
+from app.core.responses import success_response, created_response
 from app.controller.api_keys import (
     check_enterprise_permission,
     create_user_api_key,
@@ -46,8 +41,8 @@ async def list_api_keys(
     ### 排序规则
     按创建时间倒序排列（最新的在前）
     """
-    if not check_enterprise_permission(user):
-        return forbidden_response("API访问需要企业版订阅")
+    # 检查企业版权限（如无权限会抛出异常）
+    check_enterprise_permission(user)
 
     api_keys_list = await list_user_api_keys(db, user)
     api_keys_data = [k.model_dump() for k in api_keys_list]
@@ -83,8 +78,8 @@ async def create_api_key(
     Authorization: Bearer {api_key}
     ```
     """
-    if not check_enterprise_permission(user):
-        return forbidden_response("API访问需要企业版订阅")
+    # 检查企业版权限（如无权限会抛出异常）
+    check_enterprise_permission(user)
 
     api_key_data = await create_user_api_key(
         db, user, payload.name, payload.expires_days
@@ -120,9 +115,8 @@ async def delete_api_key(
     - 定期轮换 API Key
     - 清理不再使用的 Key
     """
-    key = await delete_user_api_key(db, user, key_id)
-    if not key:
-        return not_found_response("API Key 不存在", {"key_id": key_id})
+    # 删除 API Key（如不存在会抛出异常）
+    await delete_user_api_key(db, user, key_id)
 
     return success_response("删除成功")
 
@@ -163,8 +157,8 @@ async def rotate_api_key(
     - Key 可能泄露时紧急更换
     - 批量禁用所有旧 Key
     """
-    if not check_enterprise_permission(user):
-        return forbidden_response("API访问需要企业版订阅")
+    # 检查企业版权限（如无权限会抛出异常）
+    check_enterprise_permission(user)
 
     # 确定 API Key 名称和有效期
     name = "Production Key"

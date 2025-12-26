@@ -6,13 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import APIRouter, Depends, Query
 
-from app.core.responses import (
-    success_response,
-    created_response,
-    bad_request_response,
-    forbidden_response,
-)
-from app.core.deps import get_db, require_console_user
+from app.core.responses import success_response, created_response
+from app.core.deps import get_db, require_admin
 from app.core.models import User, InviteCode
 from app.controller.invite_codes import (
     create_invite_codes,
@@ -35,7 +30,7 @@ router = APIRouter(prefix="/console/invite-codes", tags=["邀请码管理"])
 async def create_codes(
     payload: CreateInviteCodeIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_admin),
 ):
     """
     批量生成邀请码（仅管理员可用）
@@ -53,14 +48,10 @@ async def create_codes(
     - 生成数量
     - 过期时间
     """
-    if not user.is_admin:
-        return forbidden_response("仅管理员可以生成邀请码")
-
-    codes, error = await create_invite_codes(
+    # 生成邀请码（如无权限会抛出异常）
+    codes = await create_invite_codes(
         db, user, payload.count, payload.expires_days, payload.note
     )
-    if error:
-        return bad_request_response(error)
 
     # 获取过期时间
     expires_at = None
@@ -84,7 +75,7 @@ async def create_codes(
 async def list_codes(
     only_unused: bool = Query(False, description="是否仅显示未使用的邀请码"),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_admin),
 ):
     """
     获取邀请码列表（仅管理员可用）
@@ -100,9 +91,6 @@ async def list_codes(
     ### 返回内容
     - 邀请码列表（按创建时间倒序）
     """
-    if not user.is_admin:
-        return forbidden_response("仅管理员可以查看邀请码")
-
     invites = await get_invite_codes(db, user, only_unused)
 
     # 构建响应数据
@@ -138,7 +126,7 @@ async def list_codes(
 async def delete_code(
     code_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_admin),
 ):
     """
     删除邀请码（仅管理员可用）
@@ -153,11 +141,7 @@ async def delete_code(
     ### 注意事项
     - 已使用的邀请码无法删除（保留历史记录）
     """
-    if not user.is_admin:
-        return forbidden_response("仅管理员可以删除邀请码")
-
-    success, error = await delete_invite_code(db, user, code_id)
-    if not success:
-        return bad_request_response(error)
+    # 删除邀请码（如无权限或不存在会抛出异常）
+    await delete_invite_code(db, user, code_id)
 
     return success_response("删除成功")

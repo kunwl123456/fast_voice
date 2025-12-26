@@ -13,11 +13,7 @@ from app.core.config import settings
 from app.tasks.jobs import run_clone_job
 from app.services.voice_tags import validate_tags
 from app.core.models import CloneJob, JobStatus, User
-from app.core.responses import (
-    success_response,
-    not_found_response,
-    bad_request_response,
-)
+from app.core.responses import success_response
 from app.core.deps import (
     get_db,
     OpenAPIPrincipal,
@@ -27,6 +23,8 @@ from app.core.deps import (
 from app.core.schemas import CloneCreateOut, CloneJobOut, Response
 from app.services.idempotency import get_idempotency, set_idempotency
 from app.services.storage import job_dir, to_public_file_url
+from app.core.error_codes import CloneError
+from app.core.exceptions import BadRequestException, NotFoundException
 
 console_router = APIRouter(prefix="/console", tags=["音色克隆"])
 openapi_router = APIRouter(prefix="/openapi", tags=["音色克隆"])
@@ -58,25 +56,28 @@ def _clone_out(job: CloneJob, user_uuid: str) -> CloneJobOut:
     )
 
 
-def _validate_audio_file(file: UploadFile) -> tuple[bool, str]:
-    """验证音频文件格式和大小"""
+def _validate_audio_file(file: UploadFile) -> None:
+    """验证音频文件格式和大小，失败时抛出异常"""
     # 验证文件名
     if not file.filename:
-        return False, "文件名不能为空"
+        raise BadRequestException(
+            message="文件名不能为空", error=CloneError.INVALID_AUDIO_FORMAT
+        )
 
     # 验证文件格式
     file_ext = os.path.splitext(file.filename)[1].lower()
     if file_ext not in settings.supported_audio_formats:
-        return (
-            False,
-            f"不支持的文件格式，仅支持：{', '.join(settings.supported_audio_formats)}",
+        raise BadRequestException(
+            message=f"不支持的文件格式，仅支持：{', '.join(settings.supported_audio_formats)}",
+            error=CloneError.INVALID_AUDIO_FORMAT,
         )
 
     # 验证文件大小（通过 Content-Length 头）
     if file.size and file.size > settings.max_audio_file_size_bytes:
-        return False, f"文件大小超过限制（最大 {settings.max_audio_file_size_mb}MB）"
-
-    return True, ""
+        raise BadRequestException(
+            message=f"文件大小超过限制（最大 {settings.max_audio_file_size_mb}MB）",
+            error=CloneError.AUDIO_TOO_LONG,
+        )
 
 
 async def _save_upload_file_async(file: UploadFile, dest_path: str) -> None:
@@ -143,21 +144,24 @@ async def console_create_clone(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
-    # 验证音频文件
-    is_valid, error_msg = _validate_audio_file(audio_file)
-    if not is_valid:
-        return bad_request_response(error_msg)
+    # 验证音频文件（失败时抛出异常）
+    _validate_audio_file(audio_file)
 
     # 解析标签
     try:
         tags_list = json.loads(tags) if tags else []
     except json.JSONDecodeError:
-        return bad_request_response("标签格式错误，必须是JSON数组")
+        raise BadRequestException(
+            message="标签格式错误，必须是JSON数组",
+            error=CloneError.INVALID_AUDIO_FORMAT,
+        )
 
     # 验证标签
     is_valid, error_msg = validate_tags(tags_list)
     if not is_valid:
-        return bad_request_response(error_msg)
+        raise BadRequestException(
+            message=error_msg, error=CloneError.INVALID_AUDIO_FORMAT
+        )
 
     job = await _create_clone_job(
         db,
@@ -180,7 +184,7 @@ async def console_create_clone(
         # 文件大小超限，删除任务
         await db.delete(job)
         await db.commit()
-        return bad_request_response(str(e))
+        raise BadRequestException(message=str(e), error=CloneError.AUDIO_TOO_LONG)
 
     job.dataset_dir = ds_dir
     db.add(job)
@@ -225,7 +229,9 @@ async def console_get_clone(
         )
     ).scalar_one_or_none()
     if not job:
-        return not_found_response("任务不存在", {"job_uuid": job_uuid})
+        raise NotFoundException(
+            error=CloneError.CLONE_NOT_FOUND, data={"job_uuid": job_uuid}
+        )
 
     clone_data = _clone_out(job, user.uuid)
     return success_response("获取成功", clone_data.model_dump())
@@ -246,21 +252,24 @@ async def openapi_create_clone(
     principal: OpenAPIPrincipal = Depends(require_openapi_principal),
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
 ):
-    # 验证音频文件
-    is_valid, error_msg = _validate_audio_file(audio_file)
-    if not is_valid:
-        return bad_request_response(error_msg)
+    # 验证音频文件（失败时抛出异常）
+    _validate_audio_file(audio_file)
 
     # 解析标签
     try:
         tags_list = json.loads(tags) if tags else []
     except json.JSONDecodeError:
-        return bad_request_response("标签格式错误，必须是JSON数组")
+        raise BadRequestException(
+            message="标签格式错误，必须是JSON数组",
+            error=CloneError.INVALID_AUDIO_FORMAT,
+        )
 
     # 验证标签
     is_valid, error_msg = validate_tags(tags_list)
     if not is_valid:
-        return bad_request_response(error_msg)
+        raise BadRequestException(
+            message=error_msg, error=CloneError.INVALID_AUDIO_FORMAT
+        )
 
     kv = KV.from_settings()
     existed = get_idempotency(
@@ -296,7 +305,7 @@ async def openapi_create_clone(
         # 文件大小超限，删除任务
         await db.delete(job)
         await db.commit()
-        return bad_request_response(str(e))
+        raise BadRequestException(message=str(e), error=CloneError.AUDIO_TOO_LONG)
 
     job.dataset_dir = ds_dir
     db.add(job)
@@ -345,7 +354,9 @@ async def openapi_get_clone(
         )
     ).scalar_one_or_none()
     if not job:
-        return not_found_response("任务不存在", {"job_uuid": job_uuid})
+        raise NotFoundException(
+            error=CloneError.CLONE_NOT_FOUND, data={"job_uuid": job_uuid}
+        )
 
     clone_data = _clone_out(job, principal.user.uuid)
     return success_response("获取成功", clone_data.model_dump())

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import User
-from app.core.responses import success_response, bad_request_response
+from app.core.responses import success_response
 from app.core.deps import get_db, require_console_user
 from app.controller.subscription import (
     get_user_subscription,
@@ -15,6 +15,8 @@ from app.controller.subscription import (
     SubscriptionPlanType,
 )
 from app.core.schemas import Response, SubscriptionInfo, UpgradeSubscriptionIn
+from app.core.error_codes import SubscriptionError
+from app.core.exceptions import BadRequestException
 
 router = APIRouter(prefix="/console", tags=["订阅管理"])
 
@@ -59,8 +61,9 @@ async def upgrade_subscription(
     - 积分可用于调用 API 服务
     """
     if not validate_plan(payload.plan):
-        return bad_request_response(
-            "无效的订阅计划", {"valid_plans": SubscriptionPlanType.can_upgrade_plans()}
+        raise BadRequestException(
+            error=SubscriptionError.INVALID_PLAN,
+            data={"valid_plans": SubscriptionPlanType.can_upgrade_plans()},
         )
 
     result = await upgrade_user_subscription(db, user, payload.plan, payload.months)

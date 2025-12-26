@@ -8,13 +8,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from app.core.models import User
 from app.services.account import update_user_field
 from app.core.deps import get_db, require_console_user
-from app.core.responses import (
-    success_response,
-    created_response,
-    conflict_response,
-    unauthorized_response,
-    bad_request_response,
-)
+from app.core.responses import success_response, created_response
 from app.controller.account import (
     login_user,
     register_user,
@@ -50,15 +44,14 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
     - 自动创建积分账户
     - 赠送免费版初始积分
     """
-    u, error = await register_user(
+    # 注册用户（如有问题会抛出异常）
+    u = await register_user(
         db,
         str(payload.email),
         payload.password,
         payload.display_name,
         payload.invite_code,
     )
-    if error:
-        return conflict_response(error, {"email": payload.email})
 
     user_data = await build_user_response(db, u)
     return created_response("注册成功", user_data.model_dump())
@@ -80,9 +73,8 @@ async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
     Authorization: Bearer {access_token}
     ```
     """
-    token, error, user = await login_user(db, str(payload.email), payload.password)
-    if error:
-        return unauthorized_response(error)
+    # 登录用户（如有问题会抛出异常）
+    token, user = await login_user(db, str(payload.email), payload.password)
 
     user_data = await build_login_response(db, user, access_token=token)
     return success_response("登录成功", user_data.model_dump())
@@ -158,17 +150,11 @@ async def upload_avatar(
     # 读取文件内容
     content = await file.read()
 
-    # 验证文件
-    is_valid, error_msg, file_ext = validate_avatar_file(
-        file.content_type, file.filename, content
-    )
-    if not is_valid:
-        return bad_request_response(error_msg)
+    # 验证文件（如有问题会抛出异常）
+    file_ext = validate_avatar_file(file.content_type, file.filename, content)
 
     # 上传头像
-    avatar_url, error = await upload_user_avatar(db, user, content, file_ext)
-    if error:
-        return bad_request_response(error)
+    await upload_user_avatar(db, user, content, file_ext)
 
     user_data = await build_user_response(db, user)
     return success_response("头像上传成功", user_data.model_dump())
@@ -214,9 +200,6 @@ async def change_password(
     - 密码使用 bcrypt 算法加密存储
     - 修改密码后需要重新登录
     """
-    success, error = await change_user_password(
-        db, user, payload.old_password, payload.new_password
-    )
-    if not success:
-        return bad_request_response(error)
+    # 修改密码（如有问题会抛出异常）
+    await change_user_password(db, user, payload.old_password, payload.new_password)
     return success_response("密码修改成功")

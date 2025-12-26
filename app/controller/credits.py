@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.models import CreditTransaction, User
 from app.services.billing import get_or_create_account, recharge
 from app.core.schemas import CreditAccountOut, CreditTxOut
+from app.core.error_codes import AccountError
+from app.core.exceptions import NotFoundException
 
 
 async def get_user_credit_balance(db: AsyncSession, user: User) -> CreditAccountOut:
@@ -68,7 +70,7 @@ async def get_user_credit_transactions(
 
 async def recharge_user_credits(
     db: AsyncSession, user_uuid: str, amount: int, note: str
-) -> tuple[User | None, dict | None]:
+) -> dict:
     """
     管理员为用户充值积分
 
@@ -79,15 +81,18 @@ async def recharge_user_credits(
     - note: 备注说明
 
     ### 返回
-    - (用户对象, 充值结果字典)，如果用户不存在则返回 (None, None)
+    - 充值结果字典
+
+    ### 异常
+    - NotFoundException: 用户不存在
     """
     recharge_user = (
         await db.execute(select(User).where(User.uuid == user_uuid))
     ).scalar_one_or_none()
 
     if not recharge_user:
-        return None, None
+        raise NotFoundException(error=AccountError.USER_NOT_FOUND)
 
     await recharge(db=db, user_id=recharge_user.id, amount=amount, note=note)
 
-    return recharge_user, {"user_id": user_uuid, "amount": amount}
+    return {"user_id": user_uuid, "amount": amount}
