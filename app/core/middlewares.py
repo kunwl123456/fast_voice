@@ -11,8 +11,8 @@ from fastapi import Request, Response
 from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.db import AsyncSessionLocal
-from app.models import ApiKey, ApiRequestLog, format_timezone
+from app.core.db import AsyncSessionLocal
+from app.core.models import ApiKey, ApiRequestLog, format_timezone
 
 
 class OpenAPILoggingMiddleware(BaseHTTPMiddleware):

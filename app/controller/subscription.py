@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas import SubscriptionInfo
+from app.core.schemas import SubscriptionInfo
 from app.services.billing import get_or_create_account
-from app.models import CreditTransaction, SubscriptionPlan, TxType, User
+from app.core.models import CreditTransaction, SubscriptionPlan, TxType, User
 from app.core.constants import (
     PlanConfig,
     SUBSCRIPTION_PLANS,

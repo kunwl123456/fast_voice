@@ -7,17 +7,17 @@ from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.models import *  # noqa: F401,F403 (ensure models imported for metadata)
+from app.core.models import *  # noqa: F401,F403 (ensure models imported for metadata)
 from app.core.openapi import setup_openapi, OPENAPI_DESCRIPTION
 from app.core.middlewares import OpenAPILoggingMiddleware
-from app.responses import (
+from app.core.responses import (
     server_error_response,
     bad_request_response,
     unauthorized_response,
     forbidden_response,
     not_found_response,
 )
-from app.exceptions import (
+from app.core.exceptions import (
     NotFoundException,
     PermissionException,
     AuthenticationException,
@@ -25,7 +25,7 @@ from app.exceptions import (
 from app.core.config import settings
 from app.services.storage import ensure_dir
 from app.services.bootstrap import bootstrap_admin
-from app.db import Base, engine, AsyncSessionLocal
+from app.core.db import Base, engine, AsyncSessionLocal
 from app.views.console import router as console_router
 from app.views.credits import router as credits_router
 from app.views.account import router as account_router

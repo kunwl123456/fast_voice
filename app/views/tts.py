@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import JSONResponse, StreamingResponse
 from fastapi import APIRouter, Depends, Header, Request
 
-from app.responses import (
+from app.core.responses import (
     success_response,
     not_found_response,
     bad_request_response,
@@ -19,11 +19,11 @@ from app.services.kv import KV
 from app.core.config import settings
 from app.tasks.jobs import run_tts_job
 from app.services.storage import to_public_file_url
-from app.models import JobStatus, TTSJob, User, CloneJob, Voice
-from app.schemas import JobOut, TTSJobOut, TTSCreatIn, Response
+from app.core.models import JobStatus, TTSJob, User, CloneJob, Voice
+from app.core.schemas import JobOut, TTSJobOut, TTSCreatIn, Response
 from app.services.idempotency import get_idempotency, set_idempotency
 from app.services.billing import calc_cost, ensure_sufficient_and_consume, utf8_bytes
-from app.deps import (
+from app.core.deps import (
     get_db,
     OpenAPIPrincipal,
     require_console_user,
@@ -262,7 +262,7 @@ async def _stream_tts_events(job_uuid: str, user_id: int) -> StreamingResponse:
 
     优先使用 Redis Pub/Sub 实时推送，Redis 不可用时降级到数据库轮询
     """
-    from app.db import AsyncSessionLocal
+    from app.core.db import AsyncSessionLocal
 
     async def event_generator():
         start_time = time.time()

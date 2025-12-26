@@ -9,8 +9,8 @@ import shutil
 from celery.utils.log import get_task_logger
 from sqlalchemy import select
 
-from app.db_sync import SessionLocalSync
-from app.models import CloneJob, JobStatus, TTSJob, Voice, format_timezone
+from app.core.db_sync import SessionLocalSync
+from app.core.models import CloneJob, JobStatus, TTSJob, Voice, format_timezone
 from app.services.billing_sync import refund
 from app.services.storage import job_dir
 from app.tasks.celery_app import celery_app

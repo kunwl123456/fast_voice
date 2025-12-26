@@ -5,10 +5,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User
-from app.deps import get_db, require_console_user
-from app.schemas import Response, ApiKeyListItem, ApiKeyOut, CreateApiKeyIn
-from app.responses import (
+from app.core.models import User
+from app.core.deps import get_db, require_console_user
+from app.core.schemas import Response, ApiKeyListItem, ApiKeyOut, CreateApiKeyIn
+from app.core.responses import (
     success_response,
     created_response,
     forbidden_response,

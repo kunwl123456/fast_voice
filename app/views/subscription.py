@@ -5,16 +5,16 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User
-from app.responses import success_response, bad_request_response
-from app.deps import get_db, require_console_user
+from app.core.models import User
+from app.core.responses import success_response, bad_request_response
+from app.core.deps import get_db, require_console_user
 from app.controller.subscription import (
     get_user_subscription,
     upgrade_user_subscription,
     validate_plan,
     SubscriptionPlanType,
 )
-from app.schemas import Response, SubscriptionInfo, UpgradeSubscriptionIn
+from app.core.schemas import Response, SubscriptionInfo, UpgradeSubscriptionIn
 
 router = APIRouter(prefix="/console", tags=["订阅管理"])
 

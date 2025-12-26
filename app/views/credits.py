@@ -5,15 +5,15 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User
-from app.responses import success_response, not_found_response
-from app.deps import get_db, require_admin, require_console_user
+from app.core.models import User
+from app.core.responses import success_response, not_found_response
+from app.core.deps import get_db, require_admin, require_console_user
 from app.controller.credits import (
     get_user_credit_balance,
     get_user_credit_transactions,
     recharge_user_credits,
 )
-from app.schemas import Response, CreditAccountOut, CreditTxOut, RechargeIn
+from app.core.schemas import Response, CreditAccountOut, CreditTxOut, RechargeIn
 
 router = APIRouter(prefix="/console", tags=["积分管理"])
 

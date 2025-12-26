@@ -6,20 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import APIRouter, Depends, Query
 
-from app.responses import (
+from app.core.responses import (
     success_response,
     created_response,
     bad_request_response,
     forbidden_response,
 )
-from app.deps import get_db, require_console_user
-from app.models import User, InviteCode
+from app.core.deps import get_db, require_console_user
+from app.core.models import User, InviteCode
 from app.controller.invite_codes import (
     create_invite_codes,
     get_invite_codes,
     delete_invite_code,
 )
-from app.schemas import (
+from app.core.schemas import (
     Response,
     CreateInviteCodeIn,
     BatchInviteCodesOut,

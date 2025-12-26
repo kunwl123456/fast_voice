@@ -5,10 +5,10 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, File, UploadFile
 
-from app.models import User
+from app.core.models import User
 from app.services.account import update_user_field
-from app.deps import get_db, require_console_user
-from app.responses import (
+from app.core.deps import get_db, require_console_user
+from app.core.responses import (
     success_response,
     created_response,
     conflict_response,
@@ -24,7 +24,7 @@ from app.controller.account import (
     change_user_password,
     validate_avatar_file,
 )
-from app.schemas import (
+from app.core.schemas import (
     Response,
     ChangePasswordIn,
     LoginIn,

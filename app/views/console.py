@@ -5,15 +5,15 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User
-from app.responses import success_response
-from app.deps import get_db, require_console_user
+from app.core.models import User
+from app.core.responses import success_response
+from app.core.deps import get_db, require_console_user
 from app.controller.console import (
     get_user_dashboard,
     get_user_usage_stats,
     get_user_request_logs,
 )
-from app.schemas import (
+from app.core.schemas import (
     Response,
     DashboardOut,
     UsageStatsOut,

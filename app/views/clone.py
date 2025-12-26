@@ -11,20 +11,20 @@ from fastapi import APIRouter, Depends, File, Form, Header, UploadFile
 from app.services.kv import KV
 from app.core.config import settings
 from app.tasks.jobs import run_clone_job
-from app.voice_tags import validate_tags
-from app.models import CloneJob, JobStatus, User
-from app.responses import (
+from app.services.voice_tags import validate_tags
+from app.core.models import CloneJob, JobStatus, User
+from app.core.responses import (
     success_response,
     not_found_response,
     bad_request_response,
 )
-from app.deps import (
+from app.core.deps import (
     get_db,
     OpenAPIPrincipal,
     require_console_user,
     require_openapi_principal,
 )
-from app.schemas import CloneCreateOut, CloneJobOut, Response
+from app.core.schemas import CloneCreateOut, CloneJobOut, Response
 from app.services.idempotency import get_idempotency, set_idempotency
 from app.services.storage import job_dir, to_public_file_url
 

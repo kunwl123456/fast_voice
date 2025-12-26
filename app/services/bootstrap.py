@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import generate_api_key, hash_password
-from app.models import ApiKey, CreditAccount, SubscriptionPlan, User, InviteCode
+from app.core.models import ApiKey, CreditAccount, SubscriptionPlan, User, InviteCode
 
 
 async def bootstrap_admin(db: AsyncSession) -> None:

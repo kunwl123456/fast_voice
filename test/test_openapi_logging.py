@@ -6,8 +6,8 @@ OpenAPI 请求日志中间件测试
 import asyncio
 from sqlalchemy import select
 
-from app.db import AsyncSessionLocal
-from app.models import ApiRequestLog, ApiKey, User
+from app.core.db import AsyncSessionLocal
+from app.core.models import ApiRequestLog, ApiKey, User
 
 
 async def test_openapi_logging():

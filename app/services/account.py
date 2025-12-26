@@ -6,7 +6,7 @@ from typing import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User
+from app.core.models import User
 
 
 async def update_user(

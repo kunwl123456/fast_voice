@@ -8,7 +8,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import InviteCode, User, format_timezone
+from app.core.models import InviteCode, User, format_timezone
 
 
 def generate_invite_code() -> str:

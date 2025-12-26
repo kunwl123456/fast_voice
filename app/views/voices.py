@@ -5,16 +5,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.responses import (
+from app.core.responses import (
     success_response,
     not_found_response,
     forbidden_response,
 )
-from app.models import User, Voice
-from app.deps import get_db, require_console_user
+from app.core.models import User, Voice
+from app.core.deps import get_db, require_console_user
 from app.services.storage import to_public_file_url
-from app.voice_tags import get_tag_categories, validate_tags
-from app.schemas import Response, VoiceOut, VoiceUpdateIn, VoiceRenameIn
+from app.services.voice_tags import get_tag_categories, validate_tags
+from app.core.schemas import Response, VoiceOut, VoiceUpdateIn, VoiceRenameIn
 
 
 console_router = APIRouter(prefix="/console", tags=["声音管理"])

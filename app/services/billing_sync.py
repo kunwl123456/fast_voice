@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import CreditAccount, CreditTransaction, TxType
+from app.core.models import CreditAccount, CreditTransaction, TxType
 
 
 def utf8_bytes(text: str) -> int:

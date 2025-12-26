@@ -14,8 +14,8 @@ os.environ["DATABASE_URL"] = (
     "postgresql+asyncpg://postgres:postgres@localhost:5432/fast_voice"
 )
 
-from app.db import AsyncSessionLocal
-from app.models import User, Voice, CloneJob
+from app.core.db import AsyncSessionLocal
+from app.core.models import User, Voice, CloneJob
 
 # 配置
 ADMIN_EMAIL = "admin@autogame.ai"

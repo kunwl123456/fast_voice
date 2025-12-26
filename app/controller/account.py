@@ -9,13 +9,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.schemas import MeOut, LoginOut
+from app.core.schemas import MeOut, LoginOut
 from app.services.account import update_user_field
 from app.services.billing import get_or_create_account
 from app.core.constants import DEFAULT_SUBSCRIPTION_PLAN
 from app.core.security import create_access_token, hash_password, verify_password
 from app.services.storage import data_dir, ensure_dir, save_bytes, to_public_file_url
-from app.models import CreditAccount, CreditTransaction, SubscriptionPlan, TxType, User
+from app.core.models import (
+    CreditAccount,
+    CreditTransaction,
+    SubscriptionPlan,
+    TxType,
+    User,
+)
 
 
 async def build_user_response(db: AsyncSession, user: User) -> MeOut:
@@ -91,7 +97,7 @@ async def validate_invite_code(
     ### 测试用法
     使用配置的测试邀请码（默认: TEST-INVITE-CODE-2024）可以绕过数据库验证
     """
-    from app.models import InviteCode, format_timezone
+    from app.core.models import InviteCode, format_timezone
 
     # 检查是否为特殊测试邀请码
     if invite_code == settings.test_invite_code:
@@ -141,7 +147,7 @@ async def register_user(
     ### 返回
     - (用户对象, 错误信息)，如果注册成功则错误信息为空字符串
     """
-    from app.models import format_timezone
+    from app.core.models import format_timezone
 
     # 验证邀请码
     invite, error = await validate_invite_code(db, invite_code)

@@ -7,10 +7,15 @@ from datetime import datetime, timedelta
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ApiRequestLog, User, Voice
+from app.core.models import ApiRequestLog, User, Voice
 from app.services.billing import get_or_create_account
 from app.controller.subscription import get_plan_config
-from app.schemas import DashboardOut, RequestLogOut, UsageStatsOut, PaginatedRequestLogs
+from app.core.schemas import (
+    DashboardOut,
+    RequestLogOut,
+    UsageStatsOut,
+    PaginatedRequestLogs,
+)
 
 
 async def get_user_dashboard(db: AsyncSession, user: User) -> DashboardOut:

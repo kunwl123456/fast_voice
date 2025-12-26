@@ -6,9 +6,9 @@ from sqlalchemy import select
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ApiKey, User
-from app.db import AsyncSessionLocal
-from app.exceptions import PermissionException, AuthenticationException
+from app.core.models import ApiKey, User
+from app.core.db import AsyncSessionLocal
+from app.core.exceptions import PermissionException, AuthenticationException
 from app.core.security import decode_access_token
 
 

@@ -14,10 +14,10 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.db import AsyncSessionLocal
+from app.core.db import AsyncSessionLocal
 from app.controller.account import validate_invite_code
 from app.core.config import settings
-from app.models import InviteCode, format_timezone
+from app.core.models import InviteCode, format_timezone
 from datetime import timedelta
 
 

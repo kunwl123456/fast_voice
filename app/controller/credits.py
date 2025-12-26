@@ -5,9 +5,9 @@ from __future__ import annotations
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import CreditTransaction, User
+from app.core.models import CreditTransaction, User
 from app.services.billing import get_or_create_account, recharge
-from app.schemas import CreditAccountOut, CreditTxOut
+from app.core.schemas import CreditAccountOut, CreditTxOut
 
 
 async def get_user_credit_balance(db: AsyncSession, user: User) -> CreditAccountOut:
