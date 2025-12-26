@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer
 
 from app.models import *  # noqa: F401,F403 (ensure models imported for metadata)
-from app.controller.openapi import setup_openapi, OPENAPI_DESCRIPTION
+from app.core.openapi import setup_openapi, OPENAPI_DESCRIPTION
 from app.core.middlewares import OpenAPILoggingMiddleware
 from app.responses import (
     server_error_response,

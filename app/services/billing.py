@@ -15,15 +15,39 @@ def calc_cost(text: str) -> int:
     return utf8_bytes(text) * int(settings.credit_price_per_utf8_byte)
 
 
-async def get_or_create_account(db: AsyncSession, user_id: int) -> CreditAccount:
-    acc = (
-        await db.execute(select(CreditAccount).where(CreditAccount.user_id == user_id))
-    ).scalar_one_or_none()
+async def get_or_create_account(
+    db: AsyncSession, user_id: int, *, lock: bool = False
+) -> CreditAccount:
+    """
+    获取或创建积分账户
+
+    Args:
+        db: 数据库会话
+        user_id: 用户ID
+        lock: 是否加行锁(SELECT FOR UPDATE),用于防止并发竞态
+    """
+    stmt = select(CreditAccount).where(CreditAccount.user_id == user_id)
+    if lock:
+        stmt = stmt.with_for_update()
+
+    acc = (await db.execute(stmt)).scalar_one_or_none()
     if acc:
         return acc
+
+    # 账户不存在,创建新账户
     acc = CreditAccount(user_id=user_id, balance=0)
     db.add(acc)
     await db.flush()
+
+    # 如果需要加锁,刷新后重新查询并加锁
+    if lock:
+        stmt = (
+            select(CreditAccount)
+            .where(CreditAccount.user_id == user_id)
+            .with_for_update()
+        )
+        acc = (await db.execute(stmt)).scalar_one()
+
     return acc
 
 
@@ -40,11 +64,20 @@ async def ensure_sufficient_and_consume(
     预扣费（创建任务时调用）：
     - 余额不足 -> 抛出 ValueError("insufficient_credits")
     - 成功 -> 写一条 consume(-amount) 流水
+
+    注意：使用 SELECT FOR UPDATE 行锁防止并发竞态条件
     """
-    acc = await get_or_create_account(db, user_id)
+    # 🔒 使用行锁获取账户，防止并发超额消费
+    acc = await get_or_create_account(db, user_id, lock=True)
+
+    # 检查余额是否充足
     if acc.balance < amount:
         raise ValueError("insufficient_credits")
+
+    # 扣减余额
     acc.balance -= amount
+
+    # 记录消费流水（amount 为负数表示消费）
     db.add(
         CreditTransaction(
             account_id=acc.id,
@@ -66,11 +99,21 @@ async def refund(
     ref_id: str,
     note: str = "",
 ) -> None:
-    """任务失败退款（V1：全额退款）。"""
+    """
+    任务失败退款（V1：全额退款）
+
+    注意：使用 SELECT FOR UPDATE 行锁保证退款操作的原子性
+    """
     if amount <= 0:
         return
-    acc = await get_or_create_account(db, user_id)
+
+    # 🔒 使用行锁获取账户，保证退款操作的一致性
+    acc = await get_or_create_account(db, user_id, lock=True)
+
+    # 增加余额
     acc.balance += amount
+
+    # 记录退款流水（amount 为正数表示退款）
     db.add(
         CreditTransaction(
             account_id=acc.id,
@@ -91,9 +134,18 @@ async def recharge(
     note: str,
     ref_id: str = "",
 ) -> None:
-    """充值。"""
-    acc = await get_or_create_account(db, user_id)
+    """
+    充值
+
+    注意：使用 SELECT FOR UPDATE 行锁保证充值操作的原子性
+    """
+    # 🔒 使用行锁获取账户，保证充值操作的一致性
+    acc = await get_or_create_account(db, user_id, lock=True)
+
+    # 增加余额
     acc.balance += amount
+
+    # 记录充值流水
     db.add(
         CreditTransaction(
             account_id=acc.id,

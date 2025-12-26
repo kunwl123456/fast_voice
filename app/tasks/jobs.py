@@ -83,7 +83,7 @@ def run_tts_job(job_id: int) -> None:
         top_k = job.top_k or 5
         top_p = job.top_p or 1.0
         webhook_url = job.webhook_url or ""
-    
+
     # 🚀 发布状态更新：running
     RedisPubSubSync.publish_job_status("tts", job_uuid, "running")
 
@@ -234,7 +234,7 @@ def run_clone_job(job_id: int) -> None:
         db.commit()
         # 提前读取 job_uuid
         job_uuid = job.uuid
-    
+
     # 🚀 发布状态更新：running
     RedisPubSubSync.publish_job_status("clone", job_uuid, "running")
 
@@ -306,7 +306,7 @@ def run_clone_job(job_id: int) -> None:
             job.status = JobStatus.succeeded
             job.updated_at = format_timezone()
             db.commit()
-        
+
         # 🚀 发布状态更新：succeeded
         RedisPubSubSync.publish_job_status("clone", job_uuid, "succeeded")
     except Exception as e:
@@ -323,6 +323,6 @@ def run_clone_job(job_id: int) -> None:
             db.commit()
             # 读取 job_uuid 用于发布
             job_uuid_failed = job.uuid
-        
+
         # 🚀 发布状态更新：failed
         RedisPubSubSync.publish_job_status("clone", job_uuid_failed, "failed")

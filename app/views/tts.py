@@ -259,7 +259,7 @@ async def openapi_get_tts(
 async def _stream_tts_events(job_uuid: str, user_id: int) -> StreamingResponse:
     """
     SSE 推送 TTS 任务状态（Redis Pub/Sub + 降级轮询）
-    
+
     优先使用 Redis Pub/Sub 实时推送，Redis 不可用时降级到数据库轮询
     """
     from app.db import AsyncSessionLocal
@@ -311,7 +311,7 @@ async def _stream_tts_events(job_uuid: str, user_id: int) -> StreamingResponse:
 
             # 3️⃣ 尝试使用 Redis Pub/Sub（优先）
             redis_available = await RedisPubSub.get_client() is not None
-            
+
             if redis_available:
                 # 🚀 使用 Redis Pub/Sub 实时推送
                 async for message in RedisPubSub.subscribe_job_status(
@@ -335,7 +335,9 @@ async def _stream_tts_events(job_uuid: str, user_id: int) -> StreamingResponse:
                     if message.get("status") in ["succeeded", "failed"]:
                         async with AsyncSessionLocal() as db:
                             job = (
-                                await db.execute(select(TTSJob).where(TTSJob.uuid == job_uuid))
+                                await db.execute(
+                                    select(TTSJob).where(TTSJob.uuid == job_uuid)
+                                )
                             ).scalar_one()
                             tts_data = _tts_out(job)
                             complete_data = {
@@ -365,7 +367,8 @@ async def _stream_tts_events(job_uuid: str, user_id: int) -> StreamingResponse:
                             job = (
                                 await db.execute(
                                     select(TTSJob).where(
-                                        TTSJob.uuid == job_uuid, TTSJob.user_id == user_id
+                                        TTSJob.uuid == job_uuid,
+                                        TTSJob.user_id == user_id,
                                     )
                                 )
                             ).scalar_one_or_none()
@@ -413,6 +416,7 @@ async def _stream_tts_events(job_uuid: str, user_id: int) -> StreamingResponse:
             return
         except Exception as e:
             import traceback
+
             error_msg = f"{type(e).__name__}: {str(e)}"
             traceback.print_exc()
             yield f"event: error\ndata: {json.dumps({'message': error_msg, 'code': 'server_error'})}\n\n"

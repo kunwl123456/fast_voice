@@ -63,16 +63,19 @@ def _validate_audio_file(file: UploadFile) -> tuple[bool, str]:
     # 验证文件名
     if not file.filename:
         return False, "文件名不能为空"
-    
+
     # 验证文件格式
     file_ext = os.path.splitext(file.filename)[1].lower()
     if file_ext not in settings.supported_audio_formats:
-        return False, f"不支持的文件格式，仅支持：{', '.join(settings.supported_audio_formats)}"
-    
+        return (
+            False,
+            f"不支持的文件格式，仅支持：{', '.join(settings.supported_audio_formats)}",
+        )
+
     # 验证文件大小（通过 Content-Length 头）
     if file.size and file.size > settings.max_audio_file_size_bytes:
         return False, f"文件大小超过限制（最大 {settings.max_audio_file_size_mb}MB）"
-    
+
     return True, ""
 
 
@@ -80,10 +83,10 @@ async def _save_upload_file_async(file: UploadFile, dest_path: str) -> None:
     """异步流式保存上传文件，避免阻塞事件循环"""
     # 确保目录存在
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-    
+
     # 流式保存，同时检查文件大小
     total_size = 0
-    async with aiofiles.open(dest_path, 'wb') as out:
+    async with aiofiles.open(dest_path, "wb") as out:
         while chunk := await file.read(8192):  # 每次读取 8KB
             total_size += len(chunk)
             # 再次验证文件大小（防止客户端伪造 Content-Length）
@@ -92,7 +95,9 @@ async def _save_upload_file_async(file: UploadFile, dest_path: str) -> None:
                 await out.close()
                 if os.path.exists(dest_path):
                     os.remove(dest_path)
-                raise ValueError(f"文件大小超过限制（最大 {settings.max_audio_file_size_mb}MB）")
+                raise ValueError(
+                    f"文件大小超过限制（最大 {settings.max_audio_file_size_mb}MB）"
+                )
             await out.write(chunk)
 
 
@@ -166,7 +171,7 @@ async def console_create_clone(
     )
     await db.flush()  # 确保 UUID 已生成
     ds_dir = job_dir("clone_dataset", user_id=user.id, job_uuid=job.uuid)
-    
+
     # 异步流式保存文件，避免阻塞事件循环
     dest_path = os.path.join(ds_dir, audio_file.filename or "audio.bin")
     try:
@@ -176,7 +181,7 @@ async def console_create_clone(
         await db.delete(job)
         await db.commit()
         return bad_request_response(str(e))
-    
+
     job.dataset_dir = ds_dir
     db.add(job)
     # 异步：如果没有 celery broker，开发时允许直接同步跑
@@ -282,7 +287,7 @@ async def openapi_create_clone(
     )
     await db.flush()  # 确保 UUID 已生成
     ds_dir = job_dir("clone_dataset", user_id=principal.user.id, job_uuid=job.uuid)
-    
+
     # 异步流式保存文件，避免阻塞事件循环
     dest_path = os.path.join(ds_dir, audio_file.filename or "audio.bin")
     try:
@@ -292,7 +297,7 @@ async def openapi_create_clone(
         await db.delete(job)
         await db.commit()
         return bad_request_response(str(e))
-    
+
     job.dataset_dir = ds_dir
     db.add(job)
     set_idempotency(
