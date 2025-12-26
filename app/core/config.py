@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     max_audio_file_size_bytes: int = 32 * 1024 * 1024  # 33554432 字节
     supported_audio_formats: list[str] = [".mp3", ".wav", ".m4a"]
 
+    # 测试用特殊邀请码（绕过数据库验证）
+    test_invite_code: str = "autogame-fast-voice"
+
     auto_create_db: bool = True
     admin_bootstrap: bool = True
     data_dir: str = "./data"

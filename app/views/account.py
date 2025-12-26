@@ -5,6 +5,9 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, File, UploadFile
 
+from app.models import User
+from app.services.account import update_user_field
+from app.deps import get_db, require_console_user
 from app.responses import (
     success_response,
     created_response,
@@ -12,16 +15,12 @@ from app.responses import (
     unauthorized_response,
     bad_request_response,
 )
-from app.deps import get_db, require_console_user
-from app.models import User
 from app.controller.account import (
-    build_user_response,
-    build_register_response,
-    register_user,
     login_user,
-    update_user_name,
+    register_user,
+    build_login_response,
+    build_user_response,
     upload_user_avatar,
-    update_user_avatar_url,
     change_user_password,
     validate_avatar_file,
 )
@@ -29,18 +28,17 @@ from app.schemas import (
     Response,
     ChangePasswordIn,
     LoginIn,
+    LoginOut,
     MeOut,
     RegisterIn,
-    RegisterOut,
     RenameIn,
-    TokenOut,
     UpdateAvatarIn,
 )
 
 router = APIRouter(prefix="/console", tags=["账户与认证"])
 
 
-@router.post("/auth/register", summary="账号注册", response_model=Response[RegisterOut])
+@router.post("/auth/register", summary="账号注册", response_model=Response[MeOut])
 async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
     """
     用户注册接口
@@ -62,11 +60,11 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
     if error:
         return conflict_response(error, {"email": payload.email})
 
-    user_data = await build_register_response(db, u)
+    user_data = await build_user_response(db, u)
     return created_response("注册成功", user_data.model_dump())
 
 
-@router.post("/auth/login", summary="账号登录", response_model=Response[TokenOut])
+@router.post("/auth/login", summary="账号登录", response_model=Response[LoginOut])
 async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
     """
     用户登录接口
@@ -82,12 +80,12 @@ async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
     Authorization: Bearer {access_token}
     ```
     """
-    token, error = await login_user(db, str(payload.email), payload.password)
+    token, error, user = await login_user(db, str(payload.email), payload.password)
     if error:
         return unauthorized_response(error)
 
-    token_data = TokenOut(access_token=token)
-    return success_response("登录成功", token_data.model_dump())
+    user_data = await build_login_response(db, user, access_token=token)
+    return success_response("登录成功", user_data.model_dump())
 
 
 @router.get("/me", summary="获取账号信息", response_model=Response[MeOut])
@@ -125,7 +123,7 @@ async def rename(
     - 更新用户的显示名称
     - 返回更新后的用户信息
     """
-    await update_user_name(db, user, payload.display_name)
+    await update_user_field(db, user, "display_name", payload.display_name)
     user_data = await build_user_response(db, user)
     return success_response("修改成功", user_data.model_dump())
 
@@ -193,7 +191,7 @@ async def update_avatar(
     - 更新后的用户信息
     - 积分余额
     """
-    await update_user_avatar_url(db, user, payload.avatar_url)
+    await update_user_field(db, user, "avatar_url", payload.avatar_url)
     user_data = await build_user_response(db, user)
     return success_response("头像更新成功", user_data.model_dump())
 

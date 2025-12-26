@@ -75,21 +75,11 @@ class MeOut(BaseModel):
         return format_datetime(dt)
 
 
-class RegisterOut(BaseModel):
-    """注册成功返回的数据"""
+class LoginOut(MeOut):
+    """登录成功返回的数据"""
 
-    id: str = Field(description="用户 UUID")
-    email: EmailStr = Field(description="邮箱地址")
-    display_name: str = Field(description="显示名称")
-    avatar_url: str = Field(description="头像 URL")
-    is_admin: bool = Field(description="是否管理员")
-    subscription_plan: str = Field(description="订阅计划（free/pro/enterprise）")
-    subscription_ends_at: datetime | str | None = Field(description="订阅到期时间")
-    credit_balance: int = Field(description="积分余额")
-
-    @field_serializer("subscription_ends_at")
-    def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
-        return format_datetime(dt)
+    access_token: str = Field(description="JWT 访问令牌")
+    token_type: str = Field(default="bearer", description="令牌类型")
 
 
 class RenameIn(BaseModel):

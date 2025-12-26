@@ -9,12 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.schemas import MeOut, RegisterOut
+from app.schemas import MeOut, LoginOut
+from app.services.account import update_user_field
 from app.services.billing import get_or_create_account
+from app.core.constants import DEFAULT_SUBSCRIPTION_PLAN
 from app.core.security import create_access_token, hash_password, verify_password
 from app.services.storage import data_dir, ensure_dir, save_bytes, to_public_file_url
 from app.models import CreditAccount, CreditTransaction, SubscriptionPlan, TxType, User
-from app.core.constants import DEFAULT_SUBSCRIPTION_PLAN
 
 
 async def build_user_response(db: AsyncSession, user: User) -> MeOut:
@@ -47,24 +48,14 @@ async def build_user_response(db: AsyncSession, user: User) -> MeOut:
     )
 
 
-async def build_register_response(db: AsyncSession, user: User) -> RegisterOut:
+async def build_login_response(
+    db: AsyncSession, user: User, access_token: str
+) -> LoginOut:
     """
-    构建注册响应对象
-
-    ### 功能说明
-    - 与 build_user_response 类似，但返回 RegisterOut 类型
-    - 用于注册接口的响应
-
-    ### 参数
-    - db: 数据库会话
-    - user: 用户对象
-
-    ### 返回
-    - RegisterOut: 注册响应对象
+    构建登录响应对象
     """
     acc = await get_or_create_account(db, user.id)
-
-    return RegisterOut(
+    return LoginOut(
         id=user.uuid,
         email=user.email,
         display_name=user.display_name,
@@ -73,7 +64,56 @@ async def build_register_response(db: AsyncSession, user: User) -> RegisterOut:
         subscription_plan=user.subscription_plan.value,
         subscription_ends_at=user.subscription_ends_at,
         credit_balance=acc.balance,
+        access_token=access_token,
     )
+
+
+async def validate_invite_code(
+    db: AsyncSession, invite_code: str
+) -> tuple[object | None, str]:
+    """
+    验证邀请码是否有效
+
+    ### 功能说明
+    - 支持特殊测试邀请码（配置在 settings.test_invite_code）
+    - 验证邀请码是否存在、是否已使用、是否过期
+    - 测试邀请码直接通过验证，返回特殊标记对象
+
+    ### 参数
+    - db: 数据库会话
+    - invite_code: 邀请码
+
+    ### 返回
+    - (邀请码对象/特殊标记, 错误信息)
+    - 如果验证成功，错误信息为空字符串
+    - 对于测试邀请码，返回 "TEST" 字符串作为特殊标记
+
+    ### 测试用法
+    使用配置的测试邀请码（默认: TEST-INVITE-CODE-2024）可以绕过数据库验证
+    """
+    from app.models import InviteCode, format_timezone
+
+    # 检查是否为特殊测试邀请码
+    if invite_code == settings.test_invite_code:
+        return "TEST", ""  # 返回特殊标记，表示是测试邀请码
+
+    # 验证邀请码
+    invite = (
+        await db.execute(
+            select(InviteCode).where(
+                InviteCode.code == invite_code, InviteCode.is_used == False
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not invite:
+        return None, "邀请码不存在或已被使用"
+
+    # 检查邀请码是否过期
+    if invite.expires_at and invite.expires_at < format_timezone():
+        return None, "邀请码已过期"
+
+    return invite, ""
 
 
 async def register_user(
@@ -93,7 +133,7 @@ async def register_user(
     1. 验证邀请码（是否存在、是否已使用、是否过期）
     2. 检查邮箱是否已存在
     3. 创建用户记录（默认为免费版订阅）
-    4. 标记邀请码为已使用
+    4. 标记邀请码为已使用（测试邀请码跳过此步）
     5. 创建积分账户（初始积分根据系统配置）
     6. 记录积分流水
     7. 返回用户基本信息
@@ -101,23 +141,12 @@ async def register_user(
     ### 返回
     - (用户对象, 错误信息)，如果注册成功则错误信息为空字符串
     """
-    from app.models import InviteCode, format_timezone
+    from app.models import format_timezone
 
     # 验证邀请码
-    invite = (
-        await db.execute(
-            select(InviteCode).where(
-                InviteCode.code == invite_code, InviteCode.is_used == False
-            )
-        )
-    ).scalar_one_or_none()
-
-    if not invite:
-        return None, "邀请码不存在或已被使用"
-
-    # 检查邀请码是否过期
-    if invite.expires_at and invite.expires_at < format_timezone():
-        return None, "邀请码已过期"
+    invite, error = await validate_invite_code(db, invite_code)
+    if error:
+        return None, error
 
     # 检查邮箱是否已存在
     existed = (
@@ -141,11 +170,12 @@ async def register_user(
         u.display_name = f"用户_{u.uuid[:6]}"
         db.add(u)
 
-    # 标记邀请码为已使用
-    invite.is_used = True
-    invite.used_by_user_id = u.id
-    invite.used_at = format_timezone()
-    db.add(invite)
+    # 标记邀请码为已使用（测试邀请码跳过）
+    if invite != "TEST":  # 测试邀请码不需要标记为已使用
+        invite.is_used = True
+        invite.used_by_user_id = u.id
+        invite.used_at = format_timezone()
+        db.add(invite)
 
     # 创建积分账户并赠送免费版初始积分
     acc = CreditAccount(user_id=u.id, balance=settings.register_free_point)
@@ -166,7 +196,9 @@ async def register_user(
     return u, ""
 
 
-async def login_user(db: AsyncSession, email: str, password: str) -> tuple[str, str]:
+async def login_user(
+    db: AsyncSession, email: str, password: str
+) -> tuple[str, str, User | None]:
     """
     用户登录业务逻辑
 
@@ -186,24 +218,10 @@ async def login_user(db: AsyncSession, email: str, password: str) -> tuple[str, 
     """
     u = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if not u or not verify_password(password, str(u.password_hash)):
-        return "", "用户名或密码错误"
+        return "", "用户名或密码错误", None
 
     token = create_access_token(subject=f"user:{u.uuid}")
-    return token, ""
-
-
-async def update_user_name(db: AsyncSession, user: User, display_name: str) -> None:
-    """
-    更新用户昵称
-
-    ### 参数
-    - db: 数据库会话
-    - user: 用户对象
-    - display_name: 新的显示名称
-    """
-    user.display_name = display_name
-    db.add(user)
-    await db.flush()
+    return token, "", u
 
 
 async def upload_user_avatar(
@@ -231,25 +249,9 @@ async def upload_user_avatar(
     avatar_url = to_public_file_url(avatar_path)
 
     # 更新用户头像
-    user.avatar_url = avatar_url
-    db.add(user)
-    await db.flush()
+    await update_user_field(db, user, "avatar_url", avatar_url)
 
     return avatar_url, ""
-
-
-async def update_user_avatar_url(db: AsyncSession, user: User, avatar_url: str) -> None:
-    """
-    更新用户头像URL（外部链接）
-
-    ### 参数
-    - db: 数据库会话
-    - user: 用户对象
-    - avatar_url: 头像URL
-    """
-    user.avatar_url = avatar_url
-    db.add(user)
-    await db.flush()
 
 
 async def change_user_password(
@@ -270,9 +272,7 @@ async def change_user_password(
     if not verify_password(old_password, user.password_hash):
         return False, "原密码错误"
 
-    user.password_hash = hash_password(new_password)
-    db.add(user)
-    await db.flush()
+    await update_user_field(db, user, "password_hash", hash_password(new_password))
 
     return True, ""
 
