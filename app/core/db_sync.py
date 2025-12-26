@@ -25,7 +25,7 @@ def _is_sqlite(url: str) -> bool:
 
 
 def _create_engine():
-    url = settings.database_url_sync or _derive_sync_url(settings.database_url)
+    url = _derive_sync_url(settings.database_url)
     if _is_sqlite(url):
         return create_engine(
             url,

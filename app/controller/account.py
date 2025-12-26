@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.core.schemas import MeOut, LoginOut
 from app.services.account import update_user_field
 from app.services.billing import get_or_create_account
-from app.core.constants import DEFAULT_SUBSCRIPTION_PLAN
+from app.core.constants import DEFAULT_SUBSCRIPTION_PLAN, SUBSCRIPTION_PLANS
 from app.core.security import create_access_token, hash_password, verify_password
 from app.services.storage import data_dir, ensure_dir, save_bytes, to_public_file_url
 from app.core.models import (
@@ -184,7 +184,8 @@ async def register_user(
         db.add(invite)
 
     # 创建积分账户并赠送免费版初始积分
-    acc = CreditAccount(user_id=u.id, balance=settings.register_free_point)
+    amount = SUBSCRIPTION_PLANS[DEFAULT_SUBSCRIPTION_PLAN].monthly_credits
+    acc = CreditAccount(user_id=u.id, balance=amount)
     db.add(acc)
     await db.flush()
 
@@ -192,7 +193,7 @@ async def register_user(
     tx = CreditTransaction(
         account_id=acc.id,
         tx_type=TxType.subscription,
-        amount=settings.register_free_point,
+        amount=amount,
         ref_type="subscription",
         ref_id="free_welcome",
         note="注册赠送免费版积分",

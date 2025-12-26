@@ -24,10 +24,6 @@ if __name__ == "__main__":
         "DATABASE_URL",
         "postgresql+asyncpg://postgres:postgres@localhost:5432/fast_voice",
     )
-    os.environ.setdefault(
-        "DATABASE_URL_SYNC",
-        "postgresql+psycopg://postgres:postgres@localhost:5432/fast_voice",
-    )
     os.environ.setdefault("DB_POOL_SIZE", "10")
     os.environ.setdefault("DB_MAX_OVERFLOW", "20")
     os.environ.setdefault("DB_POOL_TIMEOUT_SECONDS", "30")
@@ -48,14 +44,13 @@ if __name__ == "__main__":
     os.environ.setdefault("VOICE_SVC_BASE_URL", "http://192.168.1.5:4000")
     os.environ.setdefault("VOICE_TTS_BASE_URL", "http://192.168.1.5:7000")
 
-    # 注册赠送积分
-    os.environ.setdefault("REGISTER_FREE_POINT", "10000000")
-
     # 开发环境标识
-    os.environ.setdefault("ENV", "development")
+    os.environ.setdefault("ENV", "dev")
 
     # 自动创建数据库表
     os.environ.setdefault("AUTO_CREATE_DB", "false")
+    os.environ.setdefault("ADMIN_EMAIL", "admin@autogame.ai")
+    os.environ.setdefault("ADMIN_PASSWORD", "Nank$$CA#RKdU78tt")
 
     # ====================================================================
     # 启动应用

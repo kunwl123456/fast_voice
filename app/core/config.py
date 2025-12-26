@@ -4,12 +4,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """
     运行配置（环境变量驱动）。
-
-    说明：
-    - V1 默认支持 Postgres（生产）与 SQLite（本地/测试）。
-    - 连接池参数仅对非 SQLite 生效（SQLite 用 StaticPool/NullPool 更合理）。
-    - 配置来源：仅从环境变量读取（不自动加载 .env 文件）
-    - .env 文件加载由应用入口点（run.py）或测试框架（conftest.py）负责
     """
 
     model_config = SettingsConfigDict(
@@ -18,32 +12,27 @@ class Settings(BaseSettings):
         env_file=None,  # 禁用自动加载 .env，由外部控制
     )
 
-    # Web API 用异步驱动（推荐）：
+    # 异步驱动的数据库连接字符串
     # - Postgres: postgresql+asyncpg://...
-    # - SQLite:   sqlite+aiosqlite:///...
-    database_url: str = "sqlite+aiosqlite:///./fast_voice.db"
-    # Celery/同步脚本用同步驱动（与 database_url 指向同一数据库）：
-    # - Postgres: postgresql+psycopg://...
-    # - SQLite:   sqlite+pysqlite:///...
-    database_url_sync: str | None = None
-    redis_url: str | None = None
+    database_url: str
 
+    redis_url: str | None = None
     celery_broker_url: str | None = None
     celery_result_backend: str | None = None
 
-    jwt_secret: str = "dev-secret"
+    # JWT 配置
+    jwt_secret: str
     jwt_issuer: str = "fast-voice"
     jwt_access_token_minutes: int = 60 * 24
-    admin_email: str = "admin@autogame.ai"
-    admin_password: str = "Nank$CA#RKdU78tt"
 
-    # Fernet key (base64 urlsafe 32-byte)，用于加密存储 api_secret
-    api_secret_enc_key: str = ""
+    # 管理员账户
+    admin_email: str
+    admin_password: str
 
-    signature_time_window_seconds: int = 300
+    # 每字符消耗的积分数
     credit_price_per_utf8_byte: int = 1
+    # TTS的最大字符数限制
     max_text_utf8_bytes: int = 4000
-    register_free_point: int = 10000000  # 注册赠送积分（默认1000万）
 
     # 音频文件上传限制
     max_audio_file_size_mb: int = 32  # 最大 32MB
@@ -51,13 +40,14 @@ class Settings(BaseSettings):
     supported_audio_formats: list[str] = [".mp3", ".wav", ".m4a"]
 
     # 测试用特殊邀请码（绕过数据库验证）
-    test_invite_code: str = "autogame-fast-voice"
+    # 通过环境变量 TEST_INVITE_CODE 设置
+    test_invite_code: str | None = None
 
     auto_create_db: bool = True
     admin_bootstrap: bool = True
     data_dir: str = "./data"
 
-    # SQLAlchemy 连接池（仅对非 SQLite 生效）
+    # SQLAlchemy 连接池配置
     db_pool_size: int = 10
     db_max_overflow: int = 20
     db_pool_timeout_seconds: int = 30

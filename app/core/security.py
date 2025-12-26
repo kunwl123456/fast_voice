@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 import secrets
-import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -52,34 +49,3 @@ def decode_access_token(token: str) -> dict:
 def generate_api_key() -> str:
     """生成 API Key，以 sk- 开头"""
     return "sk-" + secrets.token_urlsafe(32)
-
-
-def sha256_hex(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def sign_openapi_request(
-    *,
-    secret: str,
-    method: str,
-    path: str,
-    query: str,
-    body_sha256: str,
-    timestamp: str,
-    nonce: str,
-) -> str:
-    canonical = "\n".join(
-        [method.upper(), path, query or "", body_sha256, timestamp, nonce]
-    )
-    return hmac.new(
-        secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
-
-
-def validate_timestamp(timestamp: str) -> bool:
-    try:
-        ts = int(timestamp)
-    except Exception:
-        return False
-    now = int(time.time())
-    return abs(now - ts) <= settings.signature_time_window_seconds
