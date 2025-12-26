@@ -3,8 +3,9 @@ from __future__ import annotations
 import os
 from loguru import logger
 from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.models import *  # noqa: F401,F403 (ensure models imported for metadata)
 from app.core.openapi import setup_openapi, OPENAPI_DESCRIPTION
@@ -56,6 +57,14 @@ setup_openapi(app)
 security = HTTPBearer(
     scheme_name="Bearer Authentication",
     description="输入你的 JWT Token 或 API Key（自动添加 'Bearer ' 前缀）",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # 添加 OpenAPI 请求日志中间件（必须在其他中间件之前）
