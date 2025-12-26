@@ -6,6 +6,8 @@ from fastapi import FastAPI, Request
 from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 
 from app.core.models import *  # noqa: F401,F403 (ensure models imported for metadata)
 from app.core.config import settings
@@ -22,7 +24,7 @@ from app.core.openapi import setup_openapi, OPENAPI_DESCRIPTION
 from app.routers import (
     account_router,
     api_keys_router,
-    console_router,
+    analytics_router,
     credits_router,
     subscription_router,
     clone_console_router,
@@ -39,7 +41,7 @@ from app.routers import (
 # 注册各个 views 模块的路由处理器
 import app.api.views.account  # noqa: F401
 import app.api.views.api_keys  # noqa: F401
-import app.api.views.console  # noqa: F401
+import app.api.views.analytics  # noqa: F401
 import app.api.views.credits  # noqa: F401
 import app.api.views.subscription  # noqa: F401
 import app.api.views.clone  # noqa: F401
@@ -100,6 +102,83 @@ async def capture_raw_body(request: Request, call_next):
 
     request._receive = receive  # type: ignore[attr-defined]
     return await call_next(request)
+
+
+@_app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(_: Request, exc: RequestValidationError):
+    """
+    处理 FastAPI/Pydantic 请求验证错误，转换为统一的错误响应格式
+
+    将 422 Unprocessable Entity 转换为 400 Bad Request
+    """
+    # 提取第一个验证错误的详细信息
+    errors = exc.errors()
+    if errors:
+        first_error = errors[0]
+        # 构建友好的错误消息
+        field = " -> ".join(str(loc) for loc in first_error.get("loc", []))
+        error_type = first_error.get("type", "")
+        error_msg = first_error.get("msg", "参数验证失败")
+
+        # 根据错误类型提供更友好的消息
+        if "missing" in error_type:
+            message = f"缺少必需参数：{field}"
+        elif "type_error" in error_type:
+            message = f"参数类型错误：{field}"
+        elif "value_error" in error_type:
+            message = f"参数值无效：{field} - {error_msg}"
+        else:
+            message = f"参数验证失败：{field} - {error_msg}"
+
+        # 构建详细的错误数据
+        error_details = [
+            {
+                "field": " -> ".join(str(loc) for loc in err.get("loc", [])),
+                "message": err.get("msg", ""),
+                "type": err.get("type", ""),
+            }
+            for err in errors
+        ]
+    else:
+        message = "参数验证失败"
+        error_details = []
+
+    return error_response(
+        CommonError.VALIDATION_ERROR,
+        message=message,
+        data={"errors": error_details} if error_details else None,
+    )
+
+
+@_app.exception_handler(ValidationError)
+async def pydantic_validation_exception_handler(_: Request, exc: ValidationError):
+    """
+    处理 Pydantic 模型验证错误
+    """
+    errors = exc.errors()
+    if errors:
+        first_error = errors[0]
+        field = " -> ".join(str(loc) for loc in first_error.get("loc", []))
+        error_msg = first_error.get("msg", "数据验证失败")
+        message = f"数据验证失败：{field} - {error_msg}"
+
+        error_details = [
+            {
+                "field": " -> ".join(str(loc) for loc in err.get("loc", [])),
+                "message": err.get("msg", ""),
+                "type": err.get("type", ""),
+            }
+            for err in errors
+        ]
+    else:
+        message = "数据验证失败"
+        error_details = []
+
+    return error_response(
+        CommonError.VALIDATION_ERROR,
+        message=message,
+        data={"errors": error_details} if error_details else None,
+    )
 
 
 @_app.exception_handler(ValueError)
@@ -179,7 +258,7 @@ _app.include_router(api_keys_router)
 _app.include_router(credits_router)
 _app.include_router(admin_credit_router)
 _app.include_router(admin_invite_codes_router)
-_app.include_router(console_router)
+_app.include_router(analytics_router)
 _app.include_router(voices_console_router)
 _app.include_router(voices_openapi_router)
 _app.include_router(tts_console_router)

@@ -14,6 +14,7 @@
     06 - 积分 (credits)
     07 - 订阅 (subscription)
     08 - 邀请码 (invite_codes)
+    09 - 数据分析 (analytics)
 """
 
 from dataclasses import dataclass
@@ -45,6 +46,7 @@ class Module:
     CREDIT = "06"  # 积分
     SUBSCRIPTION = "07"  # 订阅
     INVITE_CODE = "08"  # 邀请码
+    ANALYTICS = "09"  # 数据分析
 
 
 # ============================================================================
@@ -106,6 +108,9 @@ class CommonError:
     BAD_REQUEST = _make_code(HTTP_400_BAD_REQUEST, Module.COMMON, 1, "请求参数错误")
     VALIDATION_ERROR = _make_code(
         HTTP_400_BAD_REQUEST, Module.COMMON, 2, "参数验证失败"
+    )
+    INVALID_PAGINATION = _make_code(
+        HTTP_400_BAD_REQUEST, Module.COMMON, 3, "分页参数无效"
     )
 
     # 401 Unauthorized
@@ -383,6 +388,23 @@ class InviteCodeError:
 
 
 # ============================================================================
+# 数据分析错误码 (模块 09)
+# ============================================================================
+
+
+class AnalyticsError:
+    """数据分析相关错误"""
+
+    # 400 Bad Request
+    INVALID_STATS_PERIOD = _make_code(
+        HTTP_400_BAD_REQUEST, Module.ANALYTICS, 2, "统计周期无效"
+    )
+
+    # 404 Not Found
+    LOG_NOT_FOUND = _make_code(HTTP_404_NOT_FOUND, Module.ANALYTICS, 1, "日志不存在")
+
+
+# ============================================================================
 # 错误码快速索引（用于通过 code 查找错误码定义）
 # ============================================================================
 
@@ -398,6 +420,7 @@ _ERROR_CLASSES = [
     ("积分", "CREDIT", CreditError),
     ("订阅", "SUBSCRIPTION", SubscriptionError),
     ("邀请码", "INVITE_CODE", InviteCodeError),
+    ("数据分析", "ANALYTICS", AnalyticsError),
 ]
 
 
@@ -551,6 +574,7 @@ __all__ = [
     "CreditError",
     "SubscriptionError",
     "InviteCodeError",
+    "AnalyticsError",
     # 工具函数
     "get_error_code_by_value",
     "get_all_error_codes",

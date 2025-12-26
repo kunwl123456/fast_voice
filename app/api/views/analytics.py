@@ -1,4 +1,4 @@
-"""控制台功能相关路由（仪表盘和统计）"""
+"""数据分析和统计相关路由"""
 
 from __future__ import annotations
 
@@ -6,10 +6,12 @@ from fastapi import Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import User
-from app.routers import console_router as router
 from app.core.responses import success_response
+from app.routers import analytics_router as router
+from app.core.exceptions import BadRequestException
 from app.core.deps import get_db, require_console_user
-from app.api.controller.console import (
+from app.core.error_codes import AnalyticsError, CommonError
+from app.api.controller.analytics import (
     get_user_dashboard,
     get_user_usage_stats,
     get_user_request_logs,
@@ -51,7 +53,7 @@ async def get_dashboard(
     "/usage-stats", summary="每日用量统计", response_model=Response[list[UsageStatsOut]]
 )
 async def get_usage_stats(
-    days: int = Query(default=7, ge=1, le=90),
+    days: int = Query(default=7, description="查询天数（1-30天）"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
@@ -74,6 +76,11 @@ async def get_usage_stats(
     - 分析使用模式
     - 生成使用报告
     """
+    if not (1 <= days <= 30):
+        raise BadRequestException(
+            error=AnalyticsError.INVALID_STATS_PERIOD,
+            data={"field": "days", "min": 1, "max": 30, "value": days},
+        )
     results = await get_user_usage_stats(db, user, days)
     stats_data = [s.model_dump() for s in results]
     return success_response("获取成功", stats_data)
@@ -85,8 +92,8 @@ async def get_usage_stats(
     response_model=Response[PaginatedRequestLogs],
 )
 async def get_request_logs(
-    page: int = Query(default=1, ge=1, description="页码，从1开始"),
-    page_size: int = Query(default=50, ge=1, le=200, description="每页数量，最多200条"),
+    page: int = Query(default=1, description="页码，从1开始"),
+    page_size: int = Query(default=50, description="每页数量，最多200条"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console_user),
 ):
@@ -107,5 +114,24 @@ async def get_request_logs(
     - 审计 API 使用情况
     - 排查错误原因
     """
+    # 验证分页参数
+    if page < 1:
+        raise BadRequestException(
+            error=CommonError.INVALID_PAGINATION,
+            data={"field": "page", "value": page, "message": "页码必须大于等于1"},
+        )
+
+    if not (1 <= page_size <= 200):
+        raise BadRequestException(
+            error=CommonError.INVALID_PAGINATION,
+            data={
+                "field": "page_size",
+                "value": page_size,
+                "min": 1,
+                "max": 200,
+                "message": "每页数量必须在1-200之间",
+            },
+        )
+
     pagination_data = await get_user_request_logs(db, user, page, page_size)
     return success_response("获取成功", pagination_data.model_dump())

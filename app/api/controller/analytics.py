@@ -1,8 +1,9 @@
-"""控制台功能业务逻辑"""
+"""数据分析和统计业务逻辑"""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,7 +34,7 @@ async def get_user_dashboard(db: AsyncSession, user: User) -> DashboardOut:
     plan_config = get_plan_config(user.subscription_plan.value)
 
     # 计算本月使用量（基于API请求日志）
-    now = datetime.now()
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     monthly_usage = (
@@ -52,11 +53,11 @@ async def get_user_dashboard(db: AsyncSession, user: User) -> DashboardOut:
         else 0
     )
 
-    # 下一个账单日期（下个月1号）
-    if now.month == 12:
-        next_billing_date = now.replace(year=now.year + 1, month=1, day=1)
-    else:
-        next_billing_date = now.replace(month=now.month + 1, day=1)
+    # 下一个账单日期（订阅到期时间）
+    next_billing_date = ""  # 免费版，无需续费
+    if user.subscription_ends_at:
+        # 有付费订阅，显示订阅到期时间
+        next_billing_date = user.subscription_ends_at.strftime("%Y-%m-%d")
 
     # 统计克隆音色数量
     clone_count = (
@@ -78,7 +79,7 @@ async def get_user_dashboard(db: AsyncSession, user: User) -> DashboardOut:
         monthly_usage=monthly_usage,
         monthly_quota=plan_config.monthly_quota,
         usage_percent=round(usage_percent, 2),
-        next_billing_date=next_billing_date.strftime("%b %d, %Y"),
+        next_billing_date=next_billing_date,
         credit_balance=acc.balance,
         clone_count=clone_count,
         clone_limit=plan_config.clone_limit,
@@ -100,7 +101,7 @@ async def get_user_usage_stats(
     ### 返回
     - 每日统计数据列表
     """
-    end_date = datetime.now()
+    end_date = datetime.now(ZoneInfo("Asia/Shanghai"))
     start_date = end_date - timedelta(days=days)
 
     results = []

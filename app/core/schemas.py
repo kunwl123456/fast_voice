@@ -234,16 +234,20 @@ class UpgradeSubscriptionIn(BaseModel):
     """升级订阅"""
 
     plan: str = Field(
-        ...,
-        pattern=f"^({'|'.join(SubscriptionPlanType.can_upgrade_plans())})$",
         description=f"目标计划：{' 或 '.join(SubscriptionPlanType.can_upgrade_plans())}",
     )
     months: int = Field(
         default=1,
-        ge=SUBSCRIPTION_MIN_MONTHS,
-        le=SUBSCRIPTION_MAX_MONTHS,
         description=f"订阅月数（{SUBSCRIPTION_MIN_MONTHS}-{SUBSCRIPTION_MAX_MONTHS}个月）",
     )
+
+
+class UpgradeSubscriptionOut(BaseModel):
+    """升级订阅成功返回的数据"""
+
+    plan: str = Field(description="订阅计划（pro/enterprise）")
+    ends_at: str = Field(description="订阅到期时间")
+    credits_added: int = Field(description="赠送的积分数")
 
 
 class VoiceOut(BaseModel):

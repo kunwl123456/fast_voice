@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,7 +76,9 @@ async def create_user_api_key(
     """
     # 根据传入的天数计算有效期，None 表示永不过期
     expires_at = (
-        None if expires_days is None else datetime.now() + timedelta(days=expires_days)
+        None
+        if expires_days is None
+        else datetime.now(ZoneInfo("Asia/Shanghai")) + timedelta(days=expires_days)
     )
 
     api_key_value = generate_api_key()
@@ -138,7 +141,9 @@ async def rotate_user_api_key(
     """
     # 计算有效期
     expires_at = (
-        None if expires_days is None else datetime.now() + timedelta(days=expires_days)
+        None
+        if expires_days is None
+        else datetime.now(ZoneInfo("Asia/Shanghai")) + timedelta(days=expires_days)
     )
 
     # 创建新 API Key

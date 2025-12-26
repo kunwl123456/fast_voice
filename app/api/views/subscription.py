@@ -7,16 +7,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import User
 from app.core.responses import success_response
-from app.core.error_codes import SubscriptionError
-from app.core.exceptions import BadRequestException
 from app.routers import subscription_router as router
 from app.core.deps import get_db, require_console_user
-from app.core.schemas import Response, SubscriptionInfo, UpgradeSubscriptionIn
+from app.core.schemas import (
+    Response,
+    SubscriptionInfo,
+    UpgradeSubscriptionIn,
+    UpgradeSubscriptionOut,
+)
 from app.api.controller.subscription import (
     get_user_subscription,
     upgrade_user_subscription,
-    validate_plan,
-    SubscriptionPlanType,
 )
 
 
@@ -36,7 +37,11 @@ async def get_subscription(user: User = Depends(require_console_user)):
     return success_response("获取成功", subscription_data.model_dump())
 
 
-@router.post("/subscription/upgrade", summary="升级订阅", response_model=Response[dict])
+@router.post(
+    "/subscription/upgrade",
+    summary="升级订阅",
+    response_model=Response[UpgradeSubscriptionOut],
+)
 async def upgrade_subscription(
     payload: UpgradeSubscriptionIn,
     db: AsyncSession = Depends(get_db),
@@ -59,11 +64,5 @@ async def upgrade_subscription(
     - 升级时立即获得 `monthly_credits × months` 的积分
     - 积分可用于调用 API 服务
     """
-    if not validate_plan(payload.plan):
-        raise BadRequestException(
-            error=SubscriptionError.INVALID_PLAN,
-            data={"valid_plans": SubscriptionPlanType.can_upgrade_plans()},
-        )
-
     result = await upgrade_user_subscription(db, user, payload.plan, payload.months)
-    return success_response("订阅升级成功", result)
+    return success_response("订阅升级成功", result.model_dump())

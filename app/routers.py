@@ -13,8 +13,8 @@ account_router = APIRouter(prefix="/console", tags=["账户与认证"])
 # API Key 管理
 api_keys_router = APIRouter(prefix="/console", tags=["API Key 管理"])
 
-# 控制台功能（仪表盘和统计）
-console_router = APIRouter(prefix="/console", tags=["控制台"])
+# 数据分析与统计
+analytics_router = APIRouter(prefix="/console/analytics", tags=["数据分析"])
 
 # 积分管理
 credits_router = APIRouter(prefix="/console", tags=["积分管理"])
@@ -60,7 +60,7 @@ __all__ = [
     # Console 路由
     "account_router",
     "api_keys_router",
-    "console_router",
+    "analytics_router",
     "credits_router",
     "subscription_router",
     "clone_console_router",
