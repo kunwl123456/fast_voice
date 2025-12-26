@@ -10,11 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.schemas import MeOut, LoginOut
-from app.services.account import update_user_field
-from app.services.billing import get_or_create_account
+from app.api.services.account import update_user_field
+from app.api.services.billing import get_or_create_account
 from app.core.constants import DEFAULT_SUBSCRIPTION_PLAN, SUBSCRIPTION_PLANS
 from app.core.security import create_access_token, hash_password, verify_password
-from app.services.storage import data_dir, ensure_dir, save_bytes, to_public_file_url
+from app.api.services.storage import (
+    data_dir,
+    ensure_dir,
+    save_bytes,
+    to_public_file_url,
+)
 from app.core.error_codes import AccountError, InviteCodeError
 from app.core.exceptions import (
     AuthenticationException,

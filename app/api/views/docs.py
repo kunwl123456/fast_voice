@@ -4,18 +4,16 @@
 提供错误码文档、API 文档等实时预览功能
 """
 
-from fastapi import APIRouter, Query
+from fastapi import Query
 from fastapi.responses import PlainTextResponse, HTMLResponse
 
+from app.routers import docs_router as router
 from app.core.responses import success_response
 from app.core.error_codes import (
     get_all_error_codes,
     get_error_codes_by_module,
     generate_error_codes_markdown,
 )
-
-
-router = APIRouter(prefix="/docs", tags=["文档"])
 
 
 @router.get("/error-codes", summary="获取所有错误码列表")

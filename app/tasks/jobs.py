@@ -10,11 +10,11 @@ from celery.utils.log import get_task_logger
 from sqlalchemy import select
 
 from app.core.db_sync import SessionLocalSync
-from app.core.models import CloneJob, JobStatus, TTSJob, Voice, format_timezone
-from app.services.billing_sync import refund
-from app.services.storage import job_dir
+from app.api.services.billing import refund
+from app.api.services.storage import job_dir
 from app.tasks.celery_app import celery_app
-from app.services.redis_pubsub_sync import RedisPubSubSync
+from app.api.services.redis_pubsub_sync import RedisPubSubSync
+from app.core.models import CloneJob, JobStatus, TTSJob, Voice, format_timezone
 
 logger = get_task_logger(__name__)
 
@@ -166,7 +166,7 @@ def run_tts_job(job_id: int) -> None:
 
         # 调用 webhook 回调（成功）
         if webhook_url:
-            from app.services.storage import to_public_file_url
+            from app.api.services.storage import to_public_file_url
 
             _call_webhook(
                 webhook_url,

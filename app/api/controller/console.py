@@ -8,8 +8,8 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import ApiRequestLog, User, Voice
-from app.services.billing import get_or_create_account
-from app.controller.subscription import get_plan_config
+from app.api.services.billing import get_or_create_account
+from app.api.controller.subscription import get_plan_config
 from app.core.schemas import (
     DashboardOut,
     RequestLogOut,

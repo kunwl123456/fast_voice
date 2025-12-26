@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.services.kv import KV
+from app.api.services.kv import KV
 
 
 def idem_key(user_id: int, endpoint: str, key: str) -> str:

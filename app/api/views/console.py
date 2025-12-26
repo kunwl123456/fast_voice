@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import User
+from app.routers import console_router as router
 from app.core.responses import success_response
 from app.core.deps import get_db, require_console_user
-from app.controller.console import (
+from app.api.controller.console import (
     get_user_dashboard,
     get_user_usage_stats,
     get_user_request_logs,
@@ -19,8 +20,6 @@ from app.core.schemas import (
     UsageStatsOut,
     PaginatedRequestLogs,
 )
-
-router = APIRouter(prefix="/console", tags=["控制台"])
 
 
 @router.get(

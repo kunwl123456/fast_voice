@@ -6,28 +6,27 @@ import aiofiles
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends, File, Form, Header, UploadFile
+from fastapi import Depends, File, Form, Header, UploadFile
 
-from app.services.kv import KV
+from app.api.services.kv import KV
 from app.core.config import settings
 from app.tasks.jobs import run_clone_job
-from app.services.voice_tags import validate_tags
-from app.core.models import CloneJob, JobStatus, User
+from app.core.error_codes import CloneError
 from app.core.responses import success_response
+from app.api.services.voice_tags import validate_tags
+from app.core.models import CloneJob, JobStatus, User
+from app.routers import clone_console_router as console_router
+from app.routers import clone_openapi_router as openapi_router
+from app.api.services.storage import job_dir, to_public_file_url
+from app.core.schemas import CloneCreateOut, CloneJobOut, Response
+from app.core.exceptions import BadRequestException, NotFoundException
+from app.api.services.idempotency import get_idempotency, set_idempotency
 from app.core.deps import (
     get_db,
     OpenAPIPrincipal,
     require_console_user,
     require_openapi_principal,
 )
-from app.core.schemas import CloneCreateOut, CloneJobOut, Response
-from app.services.idempotency import get_idempotency, set_idempotency
-from app.services.storage import job_dir, to_public_file_url
-from app.core.error_codes import CloneError
-from app.core.exceptions import BadRequestException, NotFoundException
-
-console_router = APIRouter(prefix="/console", tags=["音色克隆"])
-openapi_router = APIRouter(prefix="/openapi", tags=["音色克隆"])
 
 
 def _clone_out(job: CloneJob, user_uuid: str) -> CloneJobOut:

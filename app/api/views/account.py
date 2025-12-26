@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import Depends, File, UploadFile
 
 from app.core.models import User
-from app.services.account import update_user_field
+from app.routers import account_router as router
+from app.api.services.account import update_user_field
 from app.core.deps import get_db, require_console_user
 from app.core.responses import success_response, created_response
-from app.controller.account import (
+from app.api.controller.account import (
     login_user,
     register_user,
     build_login_response,
@@ -28,8 +29,6 @@ from app.core.schemas import (
     RenameIn,
     UpdateAvatarIn,
 )
-
-router = APIRouter(prefix="/console", tags=["账户与认证"])
 
 
 @router.post("/auth/register", summary="账号注册", response_model=Response[MeOut])

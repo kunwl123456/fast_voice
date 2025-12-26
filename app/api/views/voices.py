@@ -3,13 +3,15 @@ from typing import List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends, Query
+from fastapi import Depends, Query
 
-from app.core.responses import success_response
 from app.core.models import User, Voice
+from app.core.responses import success_response
 from app.core.deps import get_db, require_console_user
-from app.services.storage import to_public_file_url
-from app.services.voice_tags import get_tag_categories, validate_tags
+from app.api.services.storage import to_public_file_url
+from app.routers import voices_console_router as console_router
+from app.routers import voices_openapi_router as openapi_router
+from app.api.services.voice_tags import get_tag_categories, validate_tags
 from app.core.schemas import Response, VoiceOut, VoiceUpdateIn, VoiceRenameIn
 from app.core.error_codes import VoiceError
 from app.core.exceptions import (
@@ -17,10 +19,6 @@ from app.core.exceptions import (
     NotFoundException,
     PermissionException,
 )
-
-
-console_router = APIRouter(prefix="/console", tags=["声音管理"])
-openapi_router = APIRouter(prefix="/openapi", tags=["声音管理"])
 
 
 def _voice_out(v: Voice) -> VoiceOut:

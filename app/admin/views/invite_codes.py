@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from fastapi import APIRouter, Depends, Query
+from fastapi import Depends, Query
 
-from app.core.responses import success_response, created_response
-from app.core.deps import get_db, require_admin
 from app.core.models import User, InviteCode
-from app.controller.invite_codes import (
+from app.core.deps import get_db, require_admin
+from app.routers import admin_invite_codes_router as router
+from app.core.responses import success_response, created_response
+from app.admin.controller.invite_codes import (
     create_invite_codes,
     get_invite_codes,
     delete_invite_code,
@@ -21,12 +22,8 @@ from app.core.schemas import (
     InviteCodeOut,
 )
 
-router = APIRouter(prefix="/console/invite-codes", tags=["邀请码管理"])
 
-
-@router.post(
-    "/", summary="生成邀请码（管理员）", response_model=Response[BatchInviteCodesOut]
-)
+@router.post("/", summary="生成邀请码", response_model=Response[BatchInviteCodesOut])
 async def create_codes(
     payload: CreateInviteCodeIn,
     db: AsyncSession = Depends(get_db),
@@ -69,7 +66,7 @@ async def create_codes(
 
 @router.get(
     "/",
-    summary="获取邀请码列表（管理员）",
+    summary="获取邀请码列表",
     response_model=Response[list[InviteCodeOut]],
 )
 async def list_codes(
@@ -120,9 +117,7 @@ async def list_codes(
     return success_response("获取成功", [item.model_dump() for item in result])
 
 
-@router.delete(
-    "/{code_id}", summary="删除邀请码（管理员）", response_model=Response[None]
-)
+@router.delete("/{code_id}", summary="删除邀请码", response_model=Response[None])
 async def delete_code(
     code_id: int,
     db: AsyncSession = Depends(get_db),

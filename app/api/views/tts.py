@@ -7,19 +7,25 @@ import time
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import Depends, Header, Request
 
-from app.services.kv import KV
+from app.api.services.kv import KV
 from app.core.config import settings
 from app.tasks.jobs import run_tts_job
 from app.core.responses import success_response
-from app.services.redis_pubsub import RedisPubSub
-from app.services.storage import to_public_file_url
+from app.api.services.redis_pubsub import RedisPubSub
+from app.api.services.storage import to_public_file_url
+from app.routers import tts_console_router as console_router
+from app.routers import tts_openapi_router as openapi_router
 from app.core.models import JobStatus, TTSJob, User, CloneJob, Voice
 from app.core.schemas import JobOut, TTSJobOut, TTSCreatIn, Response
-from app.services.idempotency import get_idempotency, set_idempotency
+from app.api.services.idempotency import get_idempotency, set_idempotency
 from app.core.error_codes import TTSError, VoiceError, CloneError, CreditError
-from app.services.billing import calc_cost, ensure_sufficient_and_consume, utf8_bytes
+from app.api.services.billing import (
+    calc_cost,
+    ensure_sufficient_and_consume,
+    utf8_bytes,
+)
 from app.core.exceptions import (
     BadRequestException,
     NotFoundException,
@@ -31,10 +37,6 @@ from app.core.deps import (
     require_console_user,
     require_openapi_principal,
 )
-
-
-console_router = APIRouter(prefix="/console", tags=["TTS"])
-openapi_router = APIRouter(prefix="/openapi", tags=["TTS"])
 
 
 def _tts_out(job: TTSJob) -> TTSJobOut:

@@ -204,7 +204,7 @@ def process_voices(voices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
         # 统计信息
         stats = {
-            "views": voice.get("views", 0),
+            "api": voice.get("api", 0),
             "clicks": voice.get("clicks", 0),
             "likes": voice.get("likes", 0),
             "used": voice.get("used", 0),
