@@ -36,7 +36,6 @@ htmlcov/
 .pytest_cache/
 
 .idea/
-docs/
 migrations/
 
 /test_front

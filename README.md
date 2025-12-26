@@ -46,21 +46,96 @@ fast_voice 是一个**开放平台式的 TTS（文本转语音）服务**，提�
 
 ## 核心功能
 
-- **Console（C 端用户入口）**
-  - 用户系统：注册/登录、修改昵称/密码/头像（支持上传和 URL）
-  - 订阅管理：免费版/专业版/企业版三种计划，升级赠送积分
-  - 积分账户：余额查询、流水记录（最近 200 条）、管理员调账
-  - API Key 管理：创建、列表、删除、轮换（仅企业版）
-  - 音色管理：我的音色、官方音色、公开音色、标签筛选、点赞/取消点赞
-  - 任务管理：TTS 合成任务、音色克隆任务（支持 SSE 实时状态推送）
-  - Dashboard：仪表盘概览、每日用量统计、请求日志（分页查询）
+### 📱 Console API（C 端用户控制台，`/console` 前缀）
 
-- **OpenAPI（B 端集成入口）**
-  - Bearer Token 鉴权（API Key 以 sk- 开头）
-  - 有效期管理（创建时可自定义天数）
-  - 幂等键（Idempotency-Key）支持（TTS 和克隆任务必填）
-  - 异步任务：TTS 合成、音色克隆（支持 SSE 实时状态推送）
-  - 音色服务：官方音色列表、公开音色列表（支持标签筛选）、标签分类查询
+#### 1. 账户与认证
+- 用户注册（需要邀请码）、账号登录、获取当前用户信息
+- 修改昵称、更新头像（支持文件上传和 URL）、修改密码
+
+#### 2. 订阅管理
+- 查询当前订阅计划（免费版/专业版/企业版）
+- 升级订阅（自动赠送对应积分）
+
+#### 3. 积分管理
+- 查询积分余额（自动创建账户）
+- 查询积分交易流水（最近 200 条）
+
+#### 4. API Key 管理（仅企业版）
+- 创建 API Key（自定义名称和有效期）
+- 查看 API Key 列表（脱敏显示）
+- 删除指定 API Key
+- 轮换 API Key（禁用旧 Key，创建新 Key）
+
+#### 5. 声音管理
+- 我的音色列表（用户创建的音色）
+- 官方音色列表（autogame 官方提供）
+- 公开音色列表（社区分享，支持标签筛选和排序）
+- 音色标签分类查询（性别、年龄、场景、情感等）
+- 点赞/取消点赞音色
+- 修改音色信息（名称、描述、标签、公开状态）
+
+#### 6. TTS 任务
+- 创建 TTS 合成任务（基于克隆音色）
+- 查询任务详情和状态
+- SSE 实时推送任务进度（支持 Redis Pub/Sub 和降级轮询）
+
+#### 7. 音色克隆
+- 创建克隆任务（上传音频文件）
+- 查询克隆任务详情
+- 自动生成音色并关联到用户
+
+#### 8. 控制台 Dashboard
+- 仪表盘概览（账户信息、订阅状态、积分余额、本月使用量）
+- 每日用量统计（指定天数的 API 调用统计）
+- API 请求日志（分页查询，包含请求详情和性能指标）
+
+---
+
+### 🔌 OpenAPI（B 端集成接口，`/openapi` 前缀）
+
+#### 认证方式
+- Bearer Token 鉴权（API Key 格式：`sk-xxxxxxxx`）
+- API Key 有效期管理（创建时可自定义天数）
+- 仅限企业版用户使用
+
+#### 幂等性保证
+- TTS 和克隆任务支持幂等键（`Idempotency-Key` 请求头）
+- 相同幂等键重复请求返回相同结果（TTL: 1 小时）
+
+#### TTS 服务
+- 创建 TTS 合成任务（支持幂等）
+- 查询任务详情和结果
+- SSE 实时推送任务状态更新
+
+#### 音色克隆
+- 创建克隆任务（上传音频，支持幂等）
+- 查询克隆任务状态和结果
+
+#### 音色服务
+- 官方音色列表（支持标签筛选、排序、分页）
+- 公开音色列表（社区角色市场）
+- 音色标签分类查询
+
+---
+
+### 👨‍💼 Admin API（管理员接口，`/admin` 前缀）
+
+#### 积分管理
+- 为用户充值积分（记录流水和备注）
+
+#### 邀请码管理
+- 批量生成邀请码（可设置有效期和备注）
+- 查看邀请码列表（支持筛选未使用的）
+- 删除未使用的邀请码
+
+---
+
+### 📚 文档接口（`/docs` 前缀）
+
+- 错误码列表（支持模块和状态码筛选）
+- 错误码分组查询（按模块分组）
+- 错误码 Markdown 文档导出
+- 错误码 HTML 预览页面（实时生成，与代码同步）
 
 ---
 
@@ -94,68 +169,30 @@ fast_voice 是一个**开放平台式的 TTS（文本转语音）服务**，提�
 
 ---
 
-### 4. 开发工具配置
+### 4. 开发工具
 
-#### Git Hooks（pre-commit）
+项目使用现代化的开发工具链保证代码质量：
 
-项目使用 pre-commit 自动检查代码质量：
+- **pre-commit** - Git 提交时自动检查代码（Ruff + Black）
+- **Ruff** - 快速的 Python 代码检查器和格式化工具
+- **Black** - 自动代码格式化，统一代码风格
+- **SQLAlchemy 2.0** - 异步 ORM，支持连接池配置
+- **Uvicorn** - 高性能 ASGI 服务器，支持热重载
+
+#### 快速开始
 
 ```bash
-# 安装 pre-commit
-pip install pre-commit
-
-# 安装 Git hooks
+# 安装 pre-commit hooks
 pre-commit install
 
-# 手动运行所有检查
-pre-commit run --all-files
+# 开发模式启动（热重载）
+python run.py
 
-# 每次 git commit 时会自动运行：
-# - ruff --fix（自动修复代码问题）
-# - black（格式化代码）
-```
-
-**配置文件：`.pre-commit-config.yaml`**
-
-```yaml
-default_language_version:
-    python: python3.12
-repos:
-  - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.1.14
-    hooks:
-      - id: ruff
-        args: [ "--fix"]
-
-  - repo: https://github.com/psf/black-pre-commit-mirror
-    rev: '24.1.0'
-    hooks:
-      - id: black
-        language_version: python3.12
-```
-
-#### 数据库连接池配置
-
-```bash
-# SQLAlchemy 连接池（仅对 Postgres 生效，SQLite 使用 StaticPool）
-DB_POOL_SIZE=10                 # 连接池大小
-DB_MAX_OVERFLOW=20              # 最大溢出连接数
-DB_POOL_TIMEOUT_SECONDS=30      # 获取连接超时（秒）
-DB_POOL_RECYCLE_SECONDS=1800    # 连接回收时间（秒，30分钟）
-```
-
-#### 本地开发（热重载）
-
-```bash
-# 开发模式启动（支持代码热重载）
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# 查看日志级别
-uv run uvicorn app.main:app --log-level debug
-
-# Worker 开发模式（DEBUG 日志）
+# Celery Worker 开发模式
 uv run celery -A app.tasks.celery_app:celery_app worker -l DEBUG -Q tts,clone
 ```
+
+📖 **详细配置请参考：[开发指南](docs/DEVELOPMENT.md)**
 
 ---
 
@@ -163,59 +200,119 @@ uv run celery -A app.tasks.celery_app:celery_app worker -l DEBUG -Q tts,clone
 
 ```
 fast_voice/
-├── app/                          # 后端代码（FastAPI + SQLAlchemy + Celery）
-│   ├── main.py                   # 入口：中间件、路由挂载、建表、静态文件
-│   ├── core/
-│   │   ├── config.py             # 配置：环境变量（DB/Redis/JWT/计费等）
-│   │   ├── security.py           # 安全：密码哈希、JWT、API Key 验证
-│   │   └── utils.py              # 工具函数
-│   ├── db.py                     # SQLAlchemy 异步引擎/会话（带连接池）
-│   ├── db_sync.py                # SQLAlchemy 同步引擎（Celery 使用）
-│   ├── models.py                 # 数据模型：User/ApiKey/Voice/Job/Log 等
-│   ├── schemas.py                # Pydantic 请求/响应结构
-│   ├── deps.py                   # FastAPI 依赖：DB、JWT、Bearer Token 鉴权
-│   ├── responses.py              # 统一响应格式（success/error）
-│   ├── exceptions.py             # 自定义异常类
-│   ├── subscription.py           # 订阅计划配置（免费/专业/企业版）
-│   ├── voice_tags.py             # 音色标签配置和验证
-│   ├── views/
-│   │   ├── console.py            # Console 路由：Dashboard、使用统计、请求日志
-│   │   ├── account.py            # 账户路由：注册/登录/修改信息/头像
-│   │   ├── subscription.py       # 订阅路由：查询/升级订阅
-│   │   ├── api_keys.py           # API Key 路由：创建/列表/删除/轮换
-│   │   ├── credits.py            # 积分路由：余额/流水/管理员充值
-│   │   ├── voices.py             # 音色路由：我的音色/官方音色/公开音色/标签
-│   │   ├── tts.py                # TTS 路由：创建/查询任务（双入口+SSE）
-│   │   ├── clone.py              # 克隆路由：创建/查询任务（双入口）
-│   │   └── shared.py             # 共享校验：音色权限
-│   ├── controller/
-│   │   ├── account.py            # 账户控制器：注册/登录/修改
-│   │   ├── api_keys.py           # API Key 控制器
-│   │   ├── console.py            # 控制台控制器：Dashboard 数据
-│   │   └── credits.py            # 积分控制器
-│   ├── services/
-│   │   ├── bootstrap.py          # 启动时创建管理员账号
-│   │   ├── billing.py            # 计费：扣费/退款/调账（积分流水）
-│   │   ├── billing_sync.py       # 同步计费（Celery 使用）
-│   │   ├── kv.py                 # Redis/内存 KV：nonce、幂等键
-│   │   ├── idempotency.py        # 幂等键读写封装
-│   │   ├── credit.py             # 积分服务
-│   │   └── storage.py            # 本地文件存储：DATA_DIR、job_dir、/files 映射
-│   ├── tasks/
-│   │   ├── celery_app.py         # Celery 初始化、队列路由
-│   │   └── jobs.py               # 异步任务：run_tts_job/run_clone_job
-│   └── static/
-│       └── avatars/              # 静态资源：头像图片
-├── data/                         # 生成的音频文件（通过 /files 访问）
-├── docs/                         # 文档目录
-├── test/                         # 测试代码
-├── docker-compose.yml            # Docker 编排：api + worker + db + redis
-├── Dockerfile                    # Docker 镜像构建（基于 astral uv）
-├── pyproject.toml                # uv 依赖清单
-├── uv.lock                       # 依赖锁文件
-├── .pre-commit-config.yaml       # pre-commit 配置
-└── README.md                     # 本文件
+├── app/                                # 后端应用（FastAPI + SQLAlchemy + Celery）
+│   ├── main.py                         # 应用入口：中间件、异常处理、路由注册
+│   ├── routers.py                      # 路由注册中心：14 个 APIRouter 统一定义
+│   │
+│   ├── core/                           # 核心模块
+│   │   ├── config.py                   # 配置管理：环境变量（Pydantic Settings）
+│   │   ├── constants.py                # 常量定义：订阅计划、音色标签等
+│   │   ├── db.py                       # 数据库：异步引擎/会话（带连接池）
+│   │   ├── db_sync.py                  # 数据库：同步引擎（Celery 使用）
+│   │   ├── models.py                   # 数据模型：User/Voice/Job/Credit 等（12 个表）
+│   │   ├── schemas.py                  # Pydantic Schema：请求/响应结构
+│   │   ├── deps.py                     # FastAPI 依赖：DB 会话、鉴权
+│   │   ├── security.py                 # 安全：密码哈希、JWT、API Key 验证
+│   │   ├── responses.py                # 统一响应：success_response/error_response
+│   │   ├── exceptions.py               # 自定义异常：业务异常类
+│   │   ├── error_codes.py              # 错误码定义：8 位数字编码系统
+│   │   ├── middlewares.py              # 中间件：OpenAPI 请求日志
+│   │   ├── openapi.py                  # OpenAPI 配置：Swagger 文档定制
+│   │   └── utils.py                    # 工具函数
+│   │
+│   ├── api/                            # API 层
+│   │   ├── views/                      # 路由处理器（从 routers 引用路由）
+│   │   │   ├── account.py              # 账户与认证：注册/登录/修改
+│   │   │   ├── api_keys.py             # API Key 管理：创建/删除/轮换
+│   │   │   ├── console.py              # 控制台：Dashboard/统计/日志
+│   │   │   ├── credits.py              # 积分管理：余额/流水
+│   │   │   ├── subscription.py         # 订阅管理：查询/升级
+│   │   │   ├── voices.py               # 声音管理：我的/官方/公开音色
+│   │   │   ├── tts.py                  # TTS 服务：Console + OpenAPI（SSE）
+│   │   │   ├── clone.py                # 克隆服务：Console + OpenAPI
+│   │   │   └── docs.py                 # 文档接口：错误码查询/导出
+│   │   │
+│   │   ├── controller/                 # 业务控制器（业务逻辑封装）
+│   │   │   ├── account.py              # 账户控制器
+│   │   │   ├── api_keys.py             # API Key 控制器
+│   │   │   ├── console.py              # 控制台控制器
+│   │   │   ├── credits.py              # 积分控制器
+│   │   │   ├── invite_codes.py         # 邀请码控制器
+│   │   │   └── subscription.py         # 订阅控制器
+│   │   │
+│   │   └── services/                   # 基础服务层
+│   │       ├── account.py              # 账户服务
+│   │       ├── bootstrap.py            # 启动初始化：管理员账号
+│   │       ├── billing.py              # 计费服务：扣费/退款
+│   │       ├── billing_sync.py         # 同步计费（Celery）
+│   │       ├── kv.py                   # KV 存储：Redis/内存
+│   │       ├── idempotency.py          # 幂等键管理
+│   │       ├── redis_pubsub.py         # Redis Pub/Sub：任务状态推送
+│   │       ├── redis_pubsub_sync.py    # Redis Pub/Sub 同步版本
+│   │       ├── storage.py              # 文件存储：本地文件管理
+│   │       └── voice_tags.py           # 音色标签：配置/验证
+│   │
+│   ├── admin/                          # 管理员模块
+│   │   └── views/                      # Admin 路由处理器
+│   │       ├── credit.py               # 积分管理：充值
+│   │       └── invite_codes.py         # 邀请码管理：生成/查询/删除
+│   │
+│   ├── tasks/                          # 异步任务（Celery）
+│   │   ├── celery_app.py               # Celery 应用初始化
+│   │   └── jobs.py                     # 任务定义：TTS/克隆任务
+│   │
+│   └── static/                         # 静态资源
+│       └── avatars/                    # 用户头像
+│
+├── data/                               # 数据目录（运行时生成）
+│   ├── avatars/                        # 用户上传的头像
+│   ├── tts_outputs/                    # TTS 生成的音频
+│   └── clone_datasets/                 # 克隆数据集
+│
+├── docs/                               # 项目文档
+│   ├── DEVELOPMENT.md                  # 开发指南
+│
+├── scripts/                            # 脚本工具
+│   ├── download_vocu_data.py           # 下载 VOCU 数据
+│   ├── import_vocu_simple.py           # 导入音色数据
+│   └── schema.sql                      # 数据库 Schema（参考）
+│
+├── test/                               # 测试代码
+│   ├── run_sse_test.py                 # SSE 推送测试
+│   ├── test_invite_code.py             # 邀请码测试
+│   └── verify_router_refactoring.py    # 路由重构验证
+│
+├── docker-compose.yml                  # Docker Compose 编排
+├── Dockerfile                          # Docker 镜像构建
+├── pyproject.toml                      # 项目依赖（uv 管理）
+├── uv.lock                             # 依赖锁文件
+├── run.py                              # 本地开发启动脚本
+├── .pre-commit-config.yaml             # Git Hooks 配置
+└── README.md                           # 项目说明
 ```
+
+### 核心架构说明
+
+#### 路由层（统一管理）
+- **`routers.py`** - 14 个 APIRouter 集中定义（prefix、tags）
+- **`api/views/`** - 路由处理器实现（从 routers 引用）
+- **架构优势**：集中管理、易于维护、避免重复
+
+#### 业务层（三层架构）
+- **Views** - 路由处理、参数验证、响应封装
+- **Controller** - 业务逻辑编排、权限检查
+- **Services** - 基础服务、数据访问、第三方调用
+
+#### 数据层
+- **Models** - SQLAlchemy ORM 模型（12 个表）
+- **异步引擎** - AsyncSession（API 使用）
+- **同步引擎** - Session（Celery 使用）
+- **连接池** - 可配置的连接池管理
+
+#### 任务队列
+- **Celery** - 异步任务处理
+- **队列分类** - tts（TTS 任务）、clone（克隆任务）
+- **状态推送** - Redis Pub/Sub 实时通知
 
 ---
 
