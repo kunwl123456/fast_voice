@@ -149,6 +149,7 @@ async def rename_voice(
 async def official_voices(
     db: AsyncSession = Depends(get_db),
     tags: list[str] = Query(None, description="标签筛选，可传递多个标签"),
+    tagMode: str = Query("or", description="标签匹配模式: or(满足任一标签), and(同时满足所有标签)"),
     limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
     offset: int = Query(0, ge=0, description="偏移量，用于分页"),
     orderBy: str = Query(
@@ -170,20 +171,26 @@ async def official_voices(
 
     # 如果指定了标签，进行筛选
     if tags:
-        # 对于 JSON 类型的标签字段，检查是否包含任一指定标签
-        from sqlalchemy import or_, cast
+        from sqlalchemy import or_, and_, cast
         from sqlalchemy.dialects.postgresql import JSONB
 
-        # 为每个标签创建一个条件：Voice.tags 包含该标签
-        conditions = []
-        for tag in tags:
-            # PostgreSQL: 使用 @> 操作符检查 JSON 数组是否包含元素
-            # 格式: tags @> '["tag_value"]'
-            conditions.append(cast(Voice.tags, JSONB).contains([tag]))
-
-        # 使用 OR 连接所有条件（满足任一标签即可）
-        if conditions:
-            query = query.where(or_(*conditions))
+        if tagMode == "and":
+            # AND 模式：同时包含所有标签
+            # 为每个标签创建单独的条件，然后用AND连接
+            conditions = []
+            for tag in tags:
+                conditions.append(cast(Voice.tags, JSONB).contains([tag]))
+            
+            if conditions:
+                query = query.where(and_(*conditions))
+        else:
+            # OR 模式：包含任一标签即可
+            conditions = []
+            for tag in tags:
+                conditions.append(cast(Voice.tags, JSONB).contains([tag]))
+            
+            if conditions:
+                query = query.where(or_(*conditions))
 
     # 根据 orderBy 参数选择排序方式
     if orderBy == "likes":
@@ -231,6 +238,7 @@ async def get_voice_tags():
 async def public_voices(
     db: AsyncSession = Depends(get_db),
     tags: list[str] = Query(None, description="标签筛选，可传递多个标签"),
+    tagMode: str = Query("or", description="标签匹配模式: or(满足任一标签), and(同时满足所有标签)"),
     limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
     offset: int = Query(0, ge=0, description="偏移量，用于分页"),
     orderBy: str = Query(
@@ -242,20 +250,26 @@ async def public_voices(
 
     # 如果指定了标签，进行筛选
     if tags:
-        # 对于 JSON 类型的标签字段，检查是否包含任一指定标签
-        from sqlalchemy import or_, cast
+        from sqlalchemy import or_, and_, cast
         from sqlalchemy.dialects.postgresql import JSONB
 
-        # 为每个标签创建一个条件：Voice.tags 包含该标签
-        conditions = []
-        for tag in tags:
-            # PostgreSQL: 使用 @> 操作符检查 JSON 数组是否包含元素
-            # 格式: tags @> '["tag_value"]'
-            conditions.append(cast(Voice.tags, JSONB).contains([tag]))
-
-        # 使用 OR 连接所有条件（满足任一标签即可）
-        if conditions:
-            query = query.where(or_(*conditions))
+        if tagMode == "and":
+            # AND 模式：同时包含所有标签
+            # 为每个标签创建单独的条件，然后用AND连接
+            conditions = []
+            for tag in tags:
+                conditions.append(cast(Voice.tags, JSONB).contains([tag]))
+            
+            if conditions:
+                query = query.where(and_(*conditions))
+        else:
+            # OR 模式：包含任一标签即可
+            conditions = []
+            for tag in tags:
+                conditions.append(cast(Voice.tags, JSONB).contains([tag]))
+            
+            if conditions:
+                query = query.where(or_(*conditions))
 
     # 根据 orderBy 参数选择排序方式
     if orderBy == "likes":
