@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import List
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,8 @@ from app.core.exceptions import (
     NotFoundException,
     PermissionException,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _voice_out(v: Voice) -> VoiceOut:
@@ -148,7 +151,7 @@ async def rename_voice(
 )
 async def official_voices(
     db: AsyncSession = Depends(get_db),
-    tags: list[str] = Query(None, description="标签筛选，可传递多个标签"),
+    tags: list[str] | None = Query(default=None, description="标签筛选，可传递多个标签"),
     tagMode: str = Query("or", description="标签匹配模式: or(满足任一标签), and(同时满足所有标签)"),
     limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
     offset: int = Query(0, ge=0, description="偏移量，用于分页"),
@@ -168,6 +171,9 @@ async def official_voices(
 
     # 构建基础查询
     query = select(Voice).where(Voice.owner_user_id == autogame_user.id)
+
+    # 添加调试日志
+    logger.info(f"官方音色接口 - 接收到的tags参数: {tags}, tagMode: {tagMode}")
 
     # 如果指定了标签，进行筛选
     if tags:
@@ -237,7 +243,7 @@ async def get_voice_tags():
 )
 async def public_voices(
     db: AsyncSession = Depends(get_db),
-    tags: list[str] = Query(None, description="标签筛选，可传递多个标签"),
+    tags: list[str] | None = Query(default=None, description="标签筛选，可传递多个标签"),
     tagMode: str = Query("or", description="标签匹配模式: or(满足任一标签), and(同时满足所有标签)"),
     limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
     offset: int = Query(0, ge=0, description="偏移量，用于分页"),
@@ -257,6 +263,9 @@ async def public_voices(
     if autogame_user:
         # 排除官方账号的音色
         query = query.where(Voice.owner_user_id != autogame_user.id)
+
+    # 添加调试日志
+    logger.info(f"社区音色接口 - 接收到的tags参数: {tags}, tagMode: {tagMode}")
 
     # 如果指定了标签，进行筛选
     if tags:
