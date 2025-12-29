@@ -36,8 +36,8 @@ x-common-environment: &common-environment
   TEST_INVITE_CODE: autogame-fast-voice
   
   # 外部服务配置
-  VOICE_SVC_BASE_URL: http://192.168.1.5:4000
-  VOICE_TTS_BASE_URL: http://192.168.1.5:7000
+  VOICE_SVC_BASE_URL: http://47.76.145.1:31132
+  VOICE_TTS_BASE_URL: http://47.76.145.1:31131
 
 services:
   api:
