@@ -8,23 +8,85 @@ import os
 import sys
 import json
 import asyncio
+import shutil
 from pathlib import Path
 
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, '/app')
 
-from sqlalchemy import select
-
 # Docker环境下的数据库配置（从环境变量获取）
 # 数据库连接会自动从 docker-compose.yml 中的环境变量读取
 
+from sqlalchemy import select
 from app.core.db import AsyncSessionLocal
-from app.core.models import User, Voice, CloneJob
+from app.core.models import User, Voice, CloneJob, JobStatus
 
 # 配置
 ADMIN_EMAIL = "admin@autogame.ai"
 VOCU_DATA_DIR = Path("/app/vocu_data")  # Docker容器内的路径
 VOCU_DATA_JSON = VOCU_DATA_DIR / "voices_data.json"
+DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))  # 实际数据目录
+
+
+def copy_avatar_files():
+    """复制头像文件从 vocu_data 到 data 目录"""
+    src_avatars_dir = VOCU_DATA_DIR / "avatars"  # 头像直接在 avatars 下
+    dest_avatars_dir = DATA_DIR / "avatars" / "vocu"  # 目标在 avatars/vocu 下
+    
+    if not src_avatars_dir.exists():
+        print(f"⚠️  源头像目录不存在: {src_avatars_dir}")
+        return 0
+    
+    # 确保目标目录存在
+    dest_avatars_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 复制所有头像文件
+    copied = 0
+    for avatar_file in src_avatars_dir.glob("*.webp"):
+        dest_file = dest_avatars_dir / avatar_file.name
+        shutil.copy2(avatar_file, dest_file)
+        copied += 1
+    
+    return copied
+
+
+def copy_preview_audio_files(voices_data):
+    """复制预览音频文件"""
+    src_audio_dir = VOCU_DATA_DIR / "audio"
+    
+    if not src_audio_dir.exists():
+        print(f"⚠️  源音频目录不存在: {src_audio_dir}")
+        return 0
+    
+    copied = 0
+    for voice_data in voices_data:
+        original_id = voice_data.get("id")
+        avatar_url = voice_data.get("avatar_url", "")
+        
+        if not original_id or not avatar_url:
+            continue
+        
+        # 从 avatar_url 中提取 UUID
+        # 格式: /files/avatars/vocu/d876307a-7769-4345-be6a-05b5976ac758.webp
+        try:
+            audio_uuid = avatar_url.split("/")[-1].replace(".webp", "")
+        except:
+            continue
+        
+        # 查找匹配的音频文件 (格式: {audio_uuid}_default.mp3)
+        src_audio_file = src_audio_dir / f"{audio_uuid}_default.mp3"
+        if not src_audio_file.exists():
+            continue
+        
+        # 目标路径: /data/clone/1_{original_id}/preview.wav
+        dest_dir = DATA_DIR / "clone" / f"1_{original_id}"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_file = dest_dir / "preview.wav"
+        
+        shutil.copy2(src_audio_file, dest_file)
+        copied += 1
+    
+    return copied
 
 
 async def import_voices():
@@ -41,12 +103,23 @@ async def import_voices():
     with open(VOCU_DATA_JSON, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    voices_data = data["data"]
+    # 兼容两种格式：直接数组或 {"data": [...]}
+    voices_data = data if isinstance(data, list) else data["data"]
 
     print("\n" + "=" * 70)
     print("🚀 开始导入语音数据到数据库")
     print("=" * 70)
     print(f"📊 总计: {len(voices_data)} 个语音角色")
+    
+    # 复制头像文件
+    print("\n📸 复制头像文件...")
+    copied_count = copy_avatar_files()
+    print(f"✅ 已复制 {copied_count} 个头像文件")
+    
+    # 复制预览音频文件
+    print("\n🎵 复制预览音频文件...")
+    audio_copied_count = copy_preview_audio_files(voices_data)
+    print(f"✅ 已复制 {audio_copied_count} 个预览音频文件\n")
 
     async with AsyncSessionLocal() as session:
         # 获取admin用户
@@ -59,80 +132,99 @@ async def import_voices():
             return
 
         print(f"✅ 找到管理员用户: {admin_user.email} (ID: {admin_user.id})\n")
+        
+        # 清空现有数据
+        print("🗑️  清空现有语音数据...")
+        result = await session.execute(
+            select(Voice).where(Voice.owner_user_id == admin_user.id)
+        )
+        existing_voices = result.scalars().all()
+        for v in existing_voices:
+            await session.delete(v)
+        
+        # 清空现有克隆任务
+        result = await session.execute(
+            select(CloneJob).where(CloneJob.user_id == admin_user.id)
+        )
+        existing_clone_jobs = result.scalars().all()
+        for cj in existing_clone_jobs:
+            await session.delete(cj)
+        
+        await session.commit()
+        print(f"✅ 已删除 {len(existing_voices)} 个旧语音和 {len(existing_clone_jobs)} 个克隆任务\n")
 
         imported = 0
         failed = 0
         skipped = 0
 
         for i, voice_data in enumerate(voices_data, 1):
-            clone_job_uuid = voice_data["id"]
-            name = voice_data["name"]
+            original_id = voice_data.get("id")
+            name = voice_data.get("name")
+            
+            # 跳过没有必要字段的记录
+            if not original_id or not name:
+                skipped += 1
+                continue
 
-            print(f"[{i}/{len(voices_data)}] 📥 处理: {name}")
+            if imported % 20 == 0 and imported > 0:
+                print(f"[进度] 已导入 {imported} 个...")
 
             try:
-                # 检查CloneJob是否存在
-                result = await session.execute(
-                    select(CloneJob).where(CloneJob.uuid == clone_job_uuid)
+                # 处理 preview_audio_url: 从 /files/... 转换为本地路径
+                preview_audio_url = voice_data.get("preview_audio_url", "")
+                preview_audio_path = ""
+                if preview_audio_url and preview_audio_url.startswith("/files/"):
+                    # 转换 /files/xxx 为 DATA_DIR/xxx
+                    preview_audio_path = str(DATA_DIR / preview_audio_url.replace("/files/", ""))
+                
+                avatar_url = voice_data.get("avatar_url", "")
+                description = voice_data.get("description", "")
+                tags = voice_data.get("tags", [])
+                
+                # 先创建 CloneJob 记录（TTS 接口需要查找这个）
+                clone_job = CloneJob(
+                    uuid=original_id,
+                    user_id=admin_user.id,
+                    voice_name=name,
+                    avatar_url=avatar_url,
+                    description=description,
+                    tags=tags,
+                    is_public=True,
+                    remove_background_noise=False,
+                    status=JobStatus.succeeded,  # 已成功克隆
+                    error="",
+                    dataset_dir="",
+                    result_voice_uuid=original_id,  # 指向生成的 Voice
+                    external_request_id="",
                 )
-                clone_job = result.scalar_one_or_none()
-
-                if not clone_job:
-                    # CloneJob不存在，创建一个
-                    print("  📝 创建 CloneJob...")
-                    clone_job = CloneJob(
-                        uuid=clone_job_uuid,
-                        user_id=admin_user.id,
-                        voice_name=name,
-                        avatar_url=voice_data.get("avatar_url", ""),
-                        description=voice_data.get("description", ""),
-                        tags=voice_data.get("tags", []),
-                        is_public=voice_data.get("is_public", True),
-                        status="succeeded",  # 标记为已完成
-                        dataset_dir=voice_data.get("preview_audio_url", "").replace(
-                            "/files/", ""
-                        ),
-                    )
-                    session.add(clone_job)
-                    await session.flush()
-
-                # 检查是否已经有关联的Voice
-                if clone_job.result_voice_uuid:
-                    print("  ⏭️  已存在，跳过")
-                    skipped += 1
-                    continue
-
+                session.add(clone_job)
+                
                 # 创建Voice记录
+                # uuid 和 clone_job_uuid 都使用原数据的 id
                 voice = Voice(
+                    uuid=original_id,
                     owner_user_id=admin_user.id,
                     name=name,
-                    avatar_url=voice_data.get("avatar_url", ""),
-                    description=voice_data.get("description", ""),
-                    tags=voice_data.get("tags", []),
-                    is_public=voice_data.get("is_public", True),
-                    preview_audio_path=voice_data.get("preview_audio_url", "").replace(
-                        "/files/", ""
-                    ),
-                    clone_job_uuid=clone_job_uuid,
+                    avatar_url=avatar_url,
+                    description=description,
+                    tags=tags,
+                    is_public=True,
+                    preview_audio_path=preview_audio_path,
+                    clone_job_uuid=original_id,
                     likes_count=voice_data.get("likes_count", 0),
                     generated_chars_count=voice_data.get("generated_chars_count", 0),
                     usage_count=voice_data.get("usage_count", 0),
                 )
-
                 session.add(voice)
+                
                 await session.flush()
-
-                # 更新CloneJob的result_voice_uuid
-                clone_job.result_voice_uuid = voice.uuid
-
                 await session.commit()
 
-                print(f"  ✅ 成功 - Voice UUID: {voice.uuid}")
                 imported += 1
 
             except Exception as e:
                 await session.rollback()
-                print(f"  ❌ 失败: {e}")
+                print(f"  ❌ [{i}] {name}: {e}")
                 failed += 1
 
     print("\n" + "=" * 70)

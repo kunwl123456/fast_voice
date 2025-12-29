@@ -246,7 +246,17 @@ async def public_voices(
         description="排序字段: likes(点赞), usage(使用次数), chars(生成字符数), createdAt(创建时间)",
     ),
 ):
+    # 获取官方账号，以便排除官方音色
+    autogame_user = (
+        await db.execute(select(User).where(User.email == "admin@autogame.ai"))
+    ).scalar_one_or_none()
+    
+    # 构建查询：只返回社区用户的公开音色（排除官方音色）
     query = select(Voice).where(Voice.is_public.is_(True))
+    
+    if autogame_user:
+        # 排除官方账号的音色
+        query = query.where(Voice.owner_user_id != autogame_user.id)
 
     # 如果指定了标签，进行筛选
     if tags:
