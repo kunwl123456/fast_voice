@@ -14,25 +14,56 @@ from app.core.schemas import (
     SubscriptionInfo,
     UpgradeSubscriptionIn,
     UpgradeSubscriptionOut,
+    PlanConfigOut,
 )
 from app.api.controller.subscription import (
     get_user_subscription,
     upgrade_user_subscription,
+    get_all_plan_configs,
 )
 
 
 @router.get("", summary="获取订阅信息", response_model=Response[SubscriptionInfo])
-async def get_subscription(user: User = Depends(require_console)):
+async def get_subscription(
+    user: User = Depends(require_console),
+    db: AsyncSession = Depends(get_db),
+):
     """
     获取当前用户的订阅计划信息
 
     ### 功能说明
     - 查询当前订阅计划
     - 获取订阅状态和到期时间
-    - 获取计划的功能特性列表
+    - 获取剩余积分数
     """
-    subscription_data = await get_user_subscription(user)
+    subscription_data = await get_user_subscription(user, db)
     return success_response("获取成功", subscription_data.model_dump())
+
+
+@router.get(
+    "/plans",
+    summary="获取所有订阅计划配置",
+    response_model=Response[list[PlanConfigOut]],
+)
+async def get_subscription_plans():
+    """
+    获取所有订阅计划的配置信息
+
+    ### 功能说明
+    - 返回所有可用订阅计划（free/pro/enterprise）
+    - 包含每个计划的详细配置信息
+    - 不需要登录即可访问
+
+    ### 配置信息包括
+    - monthly_credits: 每月赠送积分
+    - monthly_quota: 月度请求配额
+    - clone_limit: 克隆位限制（-1表示无限）
+    - api_access: 是否提供API访问
+    - commercial_use: 是否允许商业使用
+    - priority_support: 是否提供优先支持
+    """
+    plans = get_all_plan_configs()
+    return success_response("获取成功", [plan.model_dump() for plan in plans])
 
 
 @router.post(

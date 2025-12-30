@@ -10,6 +10,7 @@ from app.core.models import ApiKey, User
 from app.core.db import AsyncSessionLocal
 from app.core.error_codes import CommonError
 from app.core.security import decode_access_token
+from app.api.services.quota_limiter import QuotaLimiter
 from app.core.exceptions import PermissionException, AuthenticationException
 
 
@@ -139,11 +140,13 @@ async def require_openapi(
     user = (
         await db.execute(select(User).where(User.id == api.user_id))
     ).scalar_one_or_none()
-
     if not user:
         raise AuthenticationException(
             "鉴权失败：未找到用户", error=CommonError.TOKEN_INVALID
         )
+
+    # 检验 OpenAPI 请求次数配额
+    await QuotaLimiter.check_and_increment(user)
 
     request.state.current_user = user
     return OpenAPIPrincipal(user=user, api_key=api_key_value)

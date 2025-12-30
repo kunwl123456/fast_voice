@@ -131,6 +131,13 @@ class CommonError:
     RATE_LIMITED = _make_code(
         HTTP_429_TOO_MANY_REQUESTS, Module.COMMON, 1, "请求过于频繁"
     )
+    RATE_LIMIT_EXCEEDED = _make_code(
+        HTTP_429_TOO_MANY_REQUESTS, Module.COMMON, 2, "已超过配额限制"
+    )
+
+    OPERATION_FAILED = _make_code(
+        HTTP_500_INTERNAL_SERVER_ERROR, Module.COMMON, 3, "操作失败"
+    )
 
     # 500 Internal Server Error
     INTERNAL_ERROR = _make_code(
@@ -335,6 +342,15 @@ class SubscriptionError:
     INVALID_DURATION = _make_code(
         HTTP_400_BAD_REQUEST, Module.SUBSCRIPTION, 2, "无效的订阅时长"
     )
+    EXCEED_QUOTA = _make_code(
+        HTTP_400_BAD_REQUEST, Module.SUBSCRIPTION, 3, "超出API次数配额"
+    )
+    PLAN_DOWNGRADE_NOT_ALLOWED = _make_code(
+        HTTP_400_BAD_REQUEST, Module.SUBSCRIPTION, 4, "不允许降级订阅"
+    )
+    FEATURE_NOT_IN_PLAN = _make_code(
+        HTTP_400_BAD_REQUEST, Module.SUBSCRIPTION, 5, "当前订阅计划不支持此功能"
+    )
 
     # 402 Payment Required
     PAYMENT_REQUIRED = _make_code(
@@ -342,14 +358,6 @@ class SubscriptionError:
     )
     PAYMENT_FAILED = _make_code(
         HTTP_402_PAYMENT_REQUIRED, Module.SUBSCRIPTION, 2, "支付失败"
-    )
-
-    # 403 Forbidden
-    PLAN_DOWNGRADE_NOT_ALLOWED = _make_code(
-        HTTP_403_FORBIDDEN, Module.SUBSCRIPTION, 1, "不允许降级订阅"
-    )
-    FEATURE_NOT_IN_PLAN = _make_code(
-        HTTP_403_FORBIDDEN, Module.SUBSCRIPTION, 2, "当前订阅计划不支持此功能"
     )
 
     # 409 Conflict

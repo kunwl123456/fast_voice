@@ -19,6 +19,7 @@ from app.routers import clone_console_router as console_router
 from app.routers import clone_openapi_router as openapi_router
 from app.api.services.storage import job_dir, to_public_file_url
 from app.core.schemas import CloneCreateOut, CloneJobOut, Response
+from app.api.services.clone_limit_checker import check_clone_limit
 from app.core.exceptions import BadRequestException, NotFoundException
 from app.api.services.idempotency import get_idempotency, set_idempotency
 from app.core.deps import (
@@ -138,18 +139,18 @@ async def _validate_avatar_file(file: UploadFile) -> None:
 
         # 检查各种图片格式的magic bytes
         is_valid_image = False
-        
+
         # PNG: 89 50 4E 47 0D 0A 1A 0A
-        if header_bytes[:8] == b'\x89\x50\x4E\x47\x0D\x0A\x1A\x0A':
+        if header_bytes[:8] == b"\x89\x50\x4E\x47\x0D\x0A\x1A\x0A":
             is_valid_image = True
         # JPEG: FF D8 FF
-        elif header_bytes[:3] == b'\xFF\xD8\xFF':
+        elif header_bytes[:3] == b"\xFF\xD8\xFF":
             is_valid_image = True
         # GIF: 47 49 46 38 (GIF8)
-        elif header_bytes[:4] in [b'GIF87a', b'GIF89a']:
+        elif header_bytes[:4] in [b"GIF87a", b"GIF89a"]:
             is_valid_image = True
         # WebP: 52 49 46 46 ... 57 45 42 50 (RIFF...WEBP)
-        elif header_bytes[:4] == b'RIFF' and header_bytes[8:12] == b'WEBP':
+        elif header_bytes[:4] == b"RIFF" and header_bytes[8:12] == b"WEBP":
             is_valid_image = True
 
         if not is_valid_image:
@@ -189,20 +190,18 @@ async def _save_upload_file_async(file: UploadFile, dest_path: str) -> None:
             await out.write(chunk)
 
 
-async def _save_avatar_file_async(
-    file: UploadFile, user_id: int, job_uuid: str
-) -> str:
+async def _save_avatar_file_async(file: UploadFile, user_id: int, job_uuid: str) -> str:
     """异步保存头像文件并返回公开URL"""
     # 获取文件扩展名
     file_ext = os.path.splitext(file.filename or "avatar.jpg")[1].lower()
-    
+
     # 保存路径：使用 clone job 目录
     avatar_dir = job_dir("clone", user_id=user_id, job_uuid=job_uuid)
     os.makedirs(avatar_dir, exist_ok=True)
-    
+
     avatar_filename = f"avatar{file_ext}"
     avatar_path = os.path.join(avatar_dir, avatar_filename)
-    
+
     # 流式保存，同时检查文件大小
     max_avatar_size = 5 * 1024 * 1024  # 5MB
     total_size = 0
@@ -217,7 +216,7 @@ async def _save_avatar_file_async(
                     os.remove(avatar_path)
                 raise ValueError("头像文件大小超过限制（最大 5MB）")
             await out.write(chunk)
-    
+
     # 返回公开访问URL
     return to_public_file_url(avatar_path)
 
@@ -264,7 +263,10 @@ async def console_create_clone(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console),
 ):
-    # 验证音频文件（失败时抛出异常）
+    # 步骤1：检查克隆位限制
+    await check_clone_limit(db, user)
+
+    # 步骤2：验证音频文件
     await _validate_audio_file(audio_file)
 
     # 验证头像文件（如果提供）
@@ -298,7 +300,7 @@ async def console_create_clone(
         remove_background_noise,
     )
     await db.flush()  # 确保 UUID 已生成
-    
+
     # 处理头像文件上传
     avatar_url = ""
     if avatar_file and avatar_file.filename:
@@ -309,8 +311,10 @@ async def console_create_clone(
             # 头像文件上传失败，删除任务
             await db.delete(job)
             await db.commit()
-            raise BadRequestException(message=str(e), error=CloneError.INVALID_AUDIO_FORMAT)
-    
+            raise BadRequestException(
+                message=str(e), error=CloneError.INVALID_AUDIO_FORMAT
+            )
+
     ds_dir = job_dir("clone_dataset", user_id=user.id, job_uuid=job.uuid)
 
     # 异步流式保存文件，避免阻塞事件循环
@@ -389,7 +393,10 @@ async def openapi_create_clone(
     principal: OpenAPIPrincipal = Depends(require_openapi),
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
 ):
-    # 验证音频文件（失败时抛出异常）
+    # 步骤1：检查克隆位限制
+    await check_clone_limit(db, principal.user)
+
+    # 步骤2：验证音频文件
     await _validate_audio_file(audio_file)
 
     # 验证头像文件（如果提供）
@@ -436,7 +443,7 @@ async def openapi_create_clone(
         remove_background_noise,
     )
     await db.flush()  # 确保 UUID 已生成
-    
+
     # 处理头像文件上传
     avatar_url = ""
     if avatar_file and avatar_file.filename:
@@ -449,8 +456,10 @@ async def openapi_create_clone(
             # 头像文件上传失败，删除任务
             await db.delete(job)
             await db.commit()
-            raise BadRequestException(message=str(e), error=CloneError.INVALID_AUDIO_FORMAT)
-    
+            raise BadRequestException(
+                message=str(e), error=CloneError.INVALID_AUDIO_FORMAT
+            )
+
     ds_dir = job_dir("clone_dataset", user_id=principal.user.id, job_uuid=job.uuid)
 
     # 异步流式保存文件，避免阻塞事件循环

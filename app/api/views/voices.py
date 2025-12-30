@@ -11,7 +11,12 @@ from fastapi import Depends, Query, Path, File, UploadFile
 from app.core.models import User, Voice
 from app.core.responses import success_response
 from app.core.deps import get_db, require_console
-from app.api.services.storage import to_public_file_url, data_dir, ensure_dir, save_bytes
+from app.api.services.storage import (
+    to_public_file_url,
+    data_dir,
+    ensure_dir,
+    save_bytes,
+)
 from app.routers import voices_console_router as console_router
 from app.routers import voices_openapi_router as openapi_router
 from app.api.services.voice_tags import get_tag_categories, validate_tags
@@ -31,15 +36,15 @@ def _validate_voice_avatar_file(
 ) -> str:
     """
     验证音色头像文件
-    
+
     ### 参数
     - content_type: 文件 Content-Type
     - filename: 文件名
     - content: 文件内容
-    
+
     ### 返回
     - 文件扩展名
-    
+
     ### 异常
     - BadRequestException: 文件格式不支持或文件过大
     """
@@ -49,30 +54,30 @@ def _validate_voice_avatar_file(
             message="文件类型必须是图片",
             error=VoiceError.INVALID_VOICE_PARAMS,
         )
-    
+
     # 支持的图片扩展名
     allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
     file_ext = PathLib(filename or "").suffix.lower()
-    
+
     if file_ext not in allowed_extensions:
         raise BadRequestException(
             message=f"不支持的图片格式，仅支持：{', '.join(allowed_extensions)}",
             error=VoiceError.INVALID_VOICE_PARAMS,
         )
-    
+
     # 验证大小（5MB限制）
     if len(content) > 5 * 1024 * 1024:
         raise BadRequestException(
             message="头像文件大小不能超过 5MB",
             error=VoiceError.INVALID_VOICE_PARAMS,
         )
-    
+
     if len(content) == 0:
         raise BadRequestException(
             message="文件内容为空",
             error=VoiceError.INVALID_VOICE_PARAMS,
         )
-    
+
     return file_ext
 
 
@@ -230,7 +235,7 @@ async def upload_voice_avatar(
         raise NotFoundException(
             error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
         )
-    
+
     # 权限检查：只有音色拥有者可以修改
     if v.owner_user_id != user.id:
         raise PermissionException(
