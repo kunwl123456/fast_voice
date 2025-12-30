@@ -1,15 +1,17 @@
 from __future__ import annotations
 from typing import List
 import logging
+import os
+from pathlib import Path as PathLib
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Depends, Query, Path
+from fastapi import Depends, Query, Path, File, UploadFile
 
 from app.core.models import User, Voice
 from app.core.responses import success_response
 from app.core.deps import get_db, require_console
-from app.api.services.storage import to_public_file_url
+from app.api.services.storage import to_public_file_url, data_dir, ensure_dir, save_bytes
 from app.routers import voices_console_router as console_router
 from app.routers import voices_openapi_router as openapi_router
 from app.api.services.voice_tags import get_tag_categories, validate_tags
@@ -22,6 +24,56 @@ from app.core.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_voice_avatar_file(
+    content_type: str | None, filename: str | None, content: bytes
+) -> str:
+    """
+    验证音色头像文件
+    
+    ### 参数
+    - content_type: 文件 Content-Type
+    - filename: 文件名
+    - content: 文件内容
+    
+    ### 返回
+    - 文件扩展名
+    
+    ### 异常
+    - BadRequestException: 文件格式不支持或文件过大
+    """
+    # 验证文件类型
+    if not content_type or not content_type.startswith("image/"):
+        raise BadRequestException(
+            message="文件类型必须是图片",
+            error=VoiceError.INVALID_VOICE_PARAMS,
+        )
+    
+    # 支持的图片扩展名
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+    file_ext = PathLib(filename or "").suffix.lower()
+    
+    if file_ext not in allowed_extensions:
+        raise BadRequestException(
+            message=f"不支持的图片格式，仅支持：{', '.join(allowed_extensions)}",
+            error=VoiceError.INVALID_VOICE_PARAMS,
+        )
+    
+    # 验证大小（5MB限制）
+    if len(content) > 5 * 1024 * 1024:
+        raise BadRequestException(
+            message="头像文件大小不能超过 5MB",
+            error=VoiceError.INVALID_VOICE_PARAMS,
+        )
+    
+    if len(content) == 0:
+        raise BadRequestException(
+            message="文件内容为空",
+            error=VoiceError.INVALID_VOICE_PARAMS,
+        )
+    
+    return file_ext
 
 
 def _voice_out(v: Voice) -> VoiceOut:
@@ -137,6 +189,76 @@ async def rename_voice(
 
     voice_data = _voice_out(v)
     return success_response("名字修改成功", voice_data.model_dump())
+
+
+@console_router.post(
+    "/{voice_uuid}/avatar/upload",
+    summary="上传音色头像",
+    response_model=Response[VoiceOut],
+)
+async def upload_voice_avatar(
+    voice_uuid: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console),
+):
+    """
+    上传音色头像图片
+
+    ### 功能说明
+    - 上传图片文件作为音色头像
+    - 自动保存到服务器并生成访问 URL
+    - 更新音色头像地址
+
+    ### 文件要求
+    - **支持格式**: JPG, JPEG, PNG, GIF, WebP
+    - **文件大小**: 最大 5MB
+    - **Content-Type**: 必须是 `image/*` 类型
+
+    ### 存储规则
+    - 文件保存路径：`data/voice_avatars/{voice_uuid}.{ext}`
+    - 旧头像会被新上传的图片覆盖
+
+    ### 权限要求
+    - 只有音色拥有者可以上传头像
+    """
+    # 查找音色
+    v = (
+        await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
+    ).scalar_one_or_none()
+    if not v:
+        raise NotFoundException(
+            error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
+        )
+    
+    # 权限检查：只有音色拥有者可以修改
+    if v.owner_user_id != user.id:
+        raise PermissionException(
+            message="无权修改该音色", error=VoiceError.VOICE_NOT_FOUND
+        )
+
+    # 读取文件内容
+    content = await file.read()
+
+    # 验证文件（如有问题会抛出异常）
+    file_ext = _validate_voice_avatar_file(file.content_type, file.filename, content)
+
+    # 保存文件到 data/voice_avatars/{voice_uuid}{ext}
+    avatars_dir = ensure_dir(os.path.join(data_dir(), "voice_avatars"))
+    avatar_filename = f"{voice_uuid}{file_ext}"
+    avatar_path = os.path.join(avatars_dir, avatar_filename)
+    save_bytes(avatar_path, content)
+
+    # 生成公开访问URL
+    avatar_url = to_public_file_url(avatar_path)
+
+    # 更新音色头像
+    v.avatar_url = avatar_url
+    db.add(v)
+    await db.flush()
+
+    voice_data = _voice_out(v)
+    return success_response("音色头像上传成功", voice_data.model_dump())
 
 
 @console_router.get(
