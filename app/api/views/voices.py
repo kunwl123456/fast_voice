@@ -69,8 +69,8 @@ async def my_voices(
     "/{voice_id}", summary="更新音色信息", response_model=Response[VoiceOut]
 )
 async def update_voice(
-    voice_uuid: str = Path(..., alias="voice_id"),
     payload: VoiceUpdateIn,
+    voice_uuid: str = Path(..., alias="voice_id"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console),
 ):
