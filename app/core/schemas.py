@@ -317,6 +317,28 @@ class TTSJobOut(JobOut):
     output_audio_url: str = Field(default="", description="输出音频 URL")
 
 
+class TTSHistoryItemOut(BaseModel):
+    """TTS 生成历史记录项"""
+    id: str = Field(description="任务 UUID")
+    status: str = Field(description="任务状态")
+    text: str = Field(description="输入文本")
+    voice_uuid: str = Field(description="使用的音色 UUID")
+    voice_name: str = Field(description="音色名称")
+    voice_avatar_url: str = Field(default="", description="音色头像 URL")
+    output_audio_url: str = Field(default="", description="输出音频 URL")
+    cost_credits: int = Field(description="消耗的积分数")
+    created_at: str = Field(description="创建时间（ISO 8601格式）")
+    error: str = Field(default="", description="错误信息（如有）")
+
+
+class TTSHistoryListOut(BaseModel):
+    """TTS 生成历史列表"""
+    items: list[TTSHistoryItemOut] = Field(description="历史记录列表")
+    total: int = Field(description="总记录数")
+    page: int = Field(description="当前页码")
+    page_size: int = Field(description="每页数量")
+
+
 class CloneCreateIn(BaseModel):
     voice_name: str = Field(description="音色名称")
     avatar_url: str = Field(default="", description="头像 URL（可选）")

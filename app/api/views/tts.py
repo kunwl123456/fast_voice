@@ -4,10 +4,11 @@ import asyncio
 import json
 import time
 
-from sqlalchemy import select
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from starlette.responses import StreamingResponse
-from fastapi import Depends, Header, Request
+from fastapi import Depends, Header, Request, Query
 
 from app.api.services.kv import KV
 from app.core.config import settings
@@ -18,7 +19,14 @@ from app.api.services.storage import to_public_file_url
 from app.routers import tts_console_router as console_router
 from app.routers import tts_openapi_router as openapi_router
 from app.core.models import JobStatus, TTSJob, User, CloneJob, Voice
-from app.core.schemas import JobOut, TTSJobOut, TTSCreatIn, Response
+from app.core.schemas import (
+    JobOut,
+    TTSJobOut,
+    TTSCreatIn,
+    TTSHistoryItemOut,
+    TTSHistoryListOut,
+    Response,
+)
 from app.api.services.idempotency import get_idempotency, set_idempotency
 from app.core.error_codes import TTSError, VoiceError, CloneError, CreditError
 from app.api.services.billing import (
@@ -472,3 +480,216 @@ async def openapi_stream_tts_events(
     principal: OpenAPIPrincipal = Depends(require_openapi),
 ):
     return await _stream_tts_events(job_uuid, principal.user.id)
+
+
+# ==================== 历史记录接口 ====================
+
+
+@console_router.get(
+    "/history",
+    summary="获取 TTS 生成历史列表",
+    response_model=Response[TTSHistoryListOut],
+)
+async def console_get_tts_history(
+    page: int = Query(1, ge=1, description="页码（从1开始）"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量（最大100）"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console),
+):
+    """获取用户的 TTS 生成历史记录（分页）"""
+    offset = (page - 1) * page_size
+
+    # 查询总数
+    total_result = await db.execute(
+        select(func.count(TTSJob.id)).where(TTSJob.user_id == user.id)
+    )
+    total = total_result.scalar() or 0
+
+    # 查询历史记录（关联 Voice 表）
+    stmt = (
+        select(TTSJob, Voice)
+        .join(Voice, TTSJob.voice_uuid == Voice.uuid)
+        .where(TTSJob.user_id == user.id)
+        .order_by(TTSJob.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    # 构建响应数据
+    items = []
+    for job, voice in rows:
+        items.append(
+            TTSHistoryItemOut(
+                id=job.uuid,
+                status=job.status.value,
+                text=job.text,
+                voice_uuid=job.voice_uuid,
+                voice_name=voice.name,
+                voice_avatar_url=voice.avatar_url or "",
+                output_audio_url=(
+                    to_public_file_url(job.output_audio_path)
+                    if job.output_audio_path
+                    else ""
+                ),
+                cost_credits=job.cost_credits,
+                created_at=job.created_at.isoformat(),
+                error=job.error or "",
+            )
+        )
+
+    history_data = TTSHistoryListOut(
+        items=items, total=total, page=page, page_size=page_size
+    )
+    return success_response("获取历史记录成功", history_data.model_dump())
+
+
+@console_router.delete(
+    "/history/{job_uuid}",
+    summary="删除 TTS 生成历史记录",
+    response_model=Response[dict],
+)
+async def console_delete_tts_history(
+    job_uuid: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console),
+):
+    """删除指定的 TTS 生成历史记录"""
+    # 查询任务是否存在且属于当前用户
+    job = (
+        await db.execute(
+            select(TTSJob).where(TTSJob.uuid == job_uuid, TTSJob.user_id == user.id)
+        )
+    ).scalar_one_or_none()
+
+    if not job:
+        raise NotFoundException(
+            error=TTSError.INVALID_TTS_PARAMS,
+            message="历史记录不存在",
+            data={"job_uuid": job_uuid},
+        )
+
+    # 删除本地音频文件（如果存在）
+    import os
+
+    if job.output_audio_path and os.path.exists(job.output_audio_path):
+        try:
+            os.remove(job.output_audio_path)
+        except Exception as e:
+            # 记录日志但不阻塞删除操作
+            import logging
+
+            logging.warning(f"删除音频文件失败: {job.output_audio_path}, 错误: {e}")
+
+    # 删除数据库记录
+    await db.delete(job)
+    await db.commit()
+
+    return success_response("删除成功", {"job_uuid": job_uuid})
+
+
+@openapi_router.get(
+    "/history",
+    summary="获取 TTS 生成历史列表",
+    response_model=Response[TTSHistoryListOut],
+)
+async def openapi_get_tts_history(
+    page: int = Query(1, ge=1, description="页码（从1开始）"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量（最大100）"),
+    db: AsyncSession = Depends(get_db),
+    principal: OpenAPIPrincipal = Depends(require_openapi),
+):
+    """获取用户的 TTS 生成历史记录（分页）"""
+    offset = (page - 1) * page_size
+
+    # 查询总数
+    total_result = await db.execute(
+        select(func.count(TTSJob.id)).where(TTSJob.user_id == principal.user.id)
+    )
+    total = total_result.scalar() or 0
+
+    # 查询历史记录（关联 Voice 表）
+    stmt = (
+        select(TTSJob, Voice)
+        .join(Voice, TTSJob.voice_uuid == Voice.uuid)
+        .where(TTSJob.user_id == principal.user.id)
+        .order_by(TTSJob.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    # 构建响应数据
+    items = []
+    for job, voice in rows:
+        items.append(
+            TTSHistoryItemOut(
+                id=job.uuid,
+                status=job.status.value,
+                text=job.text,
+                voice_uuid=job.voice_uuid,
+                voice_name=voice.name,
+                voice_avatar_url=voice.avatar_url or "",
+                output_audio_url=(
+                    to_public_file_url(job.output_audio_path)
+                    if job.output_audio_path
+                    else ""
+                ),
+                cost_credits=job.cost_credits,
+                created_at=job.created_at.isoformat(),
+                error=job.error or "",
+            )
+        )
+
+    history_data = TTSHistoryListOut(
+        items=items, total=total, page=page, page_size=page_size
+    )
+    return success_response("获取历史记录成功", history_data.model_dump())
+
+
+@openapi_router.delete(
+    "/history/{job_uuid}",
+    summary="删除 TTS 生成历史记录",
+    response_model=Response[dict],
+)
+async def openapi_delete_tts_history(
+    job_uuid: str,
+    db: AsyncSession = Depends(get_db),
+    principal: OpenAPIPrincipal = Depends(require_openapi),
+):
+    """删除指定的 TTS 生成历史记录"""
+    # 查询任务是否存在且属于当前用户
+    job = (
+        await db.execute(
+            select(TTSJob).where(
+                TTSJob.uuid == job_uuid, TTSJob.user_id == principal.user.id
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not job:
+        raise NotFoundException(
+            error=TTSError.INVALID_TTS_PARAMS,
+            message="历史记录不存在",
+            data={"job_uuid": job_uuid},
+        )
+
+    # 删除本地音频文件（如果存在）
+    import os
+
+    if job.output_audio_path and os.path.exists(job.output_audio_path):
+        try:
+            os.remove(job.output_audio_path)
+        except Exception as e:
+            # 记录日志但不阻塞删除操作
+            import logging
+
+            logging.warning(f"删除音频文件失败: {job.output_audio_path}, 错误: {e}")
+
+    # 删除数据库记录
+    await db.delete(job)
+    await db.commit()
+
+    return success_response("删除成功", {"job_uuid": job_uuid})
