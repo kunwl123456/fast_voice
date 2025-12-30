@@ -168,13 +168,11 @@ class AccountError:
     AVATAR_SIZE_ERROR = _make_code(
         HTTP_400_BAD_REQUEST, Module.ACCOUNT, 5, "头像文件过大"
     )
-
-    # 401 Unauthorized
     LOGIN_FAILED = _make_code(
-        HTTP_401_UNAUTHORIZED, Module.ACCOUNT, 1, "用户名或密码错误"
+        HTTP_400_BAD_REQUEST, Module.ACCOUNT, 6, "用户名或密码错误"
     )
     OLD_PASSWORD_WRONG = _make_code(
-        HTTP_401_UNAUTHORIZED, Module.ACCOUNT, 2, "原密码错误"
+        HTTP_400_BAD_REQUEST, Module.ACCOUNT, 7, "原密码错误"
     )
 
     # 404 Not Found

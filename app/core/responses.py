@@ -11,7 +11,7 @@ from typing import Any
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.core.error_codes import ErrorCode, Success
+from app.core.error_codes import ErrorCode, Success, CommonError
 
 
 class ApiResponse(BaseModel):
@@ -197,3 +197,30 @@ def deleted_response(message: str = "删除成功", data: Any = None) -> JSONRes
         JSONResponse
     """
     return success_response(message, data, status_code=200)
+
+
+def unauthorized_response(message: str = "未授权", data: Any = None) -> JSONResponse:
+    """
+    未授权响应 (HTTP 401)
+
+    Args:
+        message: 成功消息
+        data: 额外信息（可选）
+
+    Returns:
+        JSONResponse
+    """
+    return error_response(CommonError.UNAUTHORIZED, message, data)
+
+
+def forbidden_response(message: str = "无权限", data: Any = None) -> JSONResponse:
+    """
+    无权限响应 (HTTP 403)
+    Args:
+        message: 成功消息
+        data: 额外信息（可选）
+
+    Returns:
+        JSONResponse
+    """
+    return error_response(CommonError.FORBIDDEN, message, data)

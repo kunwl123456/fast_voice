@@ -4,10 +4,13 @@ import secrets
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from jose import JWTError, jwt
 from passlib.context import CryptContext
+from jose import jwt, JWTError, ExpiredSignatureError
 
 from app.core.config import settings
+from app.core.error_codes import CommonError
+from app.core.exceptions import AuthenticationException
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -41,8 +44,14 @@ def decode_access_token(token: str) -> dict:
         payload = jwt.decode(
             token, settings.jwt_secret, algorithms=["HS256"], issuer=settings.jwt_issuer
         )
-    except JWTError as e:
-        raise ValueError("invalid_token") from e
+    except ExpiredSignatureError:
+        raise AuthenticationException(
+            "鉴权失败：登录状态已过期", error=CommonError.TOKEN_EXPIRED
+        )
+    except JWTError as err:
+        raise AuthenticationException(
+            f"鉴权失败：{err}", error=CommonError.TOKEN_INVALID
+        )
     return payload
 
 
