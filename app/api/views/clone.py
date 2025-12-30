@@ -55,8 +55,8 @@ def _clone_out(job: CloneJob, user_uuid: str) -> CloneJobOut:
     )
 
 
-def _validate_audio_file(file: UploadFile) -> None:
-    """验证音频文件格式和大小，失败时抛出异常"""
+async def _validate_audio_file(file: UploadFile) -> None:
+    """异步验证音频文件格式和大小，失败时抛出异常"""
     # 验证文件名
     if not file.filename:
         raise BadRequestException(
@@ -76,6 +76,94 @@ def _validate_audio_file(file: UploadFile) -> None:
         raise BadRequestException(
             message=f"文件大小超过限制（最大 {settings.max_audio_file_size_mb}MB）",
             error=CloneError.AUDIO_TOO_LONG,
+        )
+
+    # 异步读取文件头部，确保文件可读且不为空
+    try:
+        # 读取前几个字节检查文件是否有效
+        header_bytes = await file.read(16)
+        # 重置文件指针
+        await file.seek(0)
+
+        if not header_bytes:
+            raise BadRequestException(
+                message="音频文件内容为空", error=CloneError.INVALID_AUDIO_FORMAT
+            )
+    except Exception as e:
+        if isinstance(e, BadRequestException):
+            raise
+        raise BadRequestException(
+            message=f"验证音频文件时出错: {str(e)}",
+            error=CloneError.INVALID_AUDIO_FORMAT,
+        )
+
+
+async def _validate_avatar_file(file: UploadFile) -> None:
+    """异步验证头像文件格式和大小，失败时抛出异常"""
+    # 验证文件名
+    if not file.filename:
+        raise BadRequestException(
+            message="头像文件名不能为空", error=CloneError.INVALID_AUDIO_FORMAT
+        )
+
+    # 验证文件格式（支持常见图片格式）
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    supported_image_formats = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+    if file_ext not in supported_image_formats:
+        raise BadRequestException(
+            message=f"不支持的图片格式，仅支持：{', '.join(supported_image_formats)}",
+            error=CloneError.INVALID_AUDIO_FORMAT,
+        )
+
+    # 验证文件大小（限制为5MB）
+    max_avatar_size = 5 * 1024 * 1024  # 5MB
+    if file.size and file.size > max_avatar_size:
+        raise BadRequestException(
+            message="头像文件大小超过限制（最大 5MB）",
+            error=CloneError.AUDIO_TOO_LONG,
+        )
+
+    # 异步读取文件头部，验证真实文件类型（magic bytes）
+    try:
+        # 读取前16字节用于识别文件类型
+        header_bytes = await file.read(16)
+        # 重置文件指针，以便后续保存时能完整读取
+        await file.seek(0)
+
+        # 验证文件magic bytes
+        if not header_bytes:
+            raise BadRequestException(
+                message="文件内容为空", error=CloneError.INVALID_AUDIO_FORMAT
+            )
+
+        # 检查各种图片格式的magic bytes
+        is_valid_image = False
+        
+        # PNG: 89 50 4E 47 0D 0A 1A 0A
+        if header_bytes[:8] == b'\x89\x50\x4E\x47\x0D\x0A\x1A\x0A':
+            is_valid_image = True
+        # JPEG: FF D8 FF
+        elif header_bytes[:3] == b'\xFF\xD8\xFF':
+            is_valid_image = True
+        # GIF: 47 49 46 38 (GIF8)
+        elif header_bytes[:4] in [b'GIF87a', b'GIF89a']:
+            is_valid_image = True
+        # WebP: 52 49 46 46 ... 57 45 42 50 (RIFF...WEBP)
+        elif header_bytes[:4] == b'RIFF' and header_bytes[8:12] == b'WEBP':
+            is_valid_image = True
+
+        if not is_valid_image:
+            raise BadRequestException(
+                message="文件不是有效的图片格式",
+                error=CloneError.INVALID_AUDIO_FORMAT,
+            )
+
+    except Exception as e:
+        if isinstance(e, BadRequestException):
+            raise
+        raise BadRequestException(
+            message=f"验证头像文件时出错: {str(e)}",
+            error=CloneError.INVALID_AUDIO_FORMAT,
         )
 
 
@@ -99,6 +187,39 @@ async def _save_upload_file_async(file: UploadFile, dest_path: str) -> None:
                     f"文件大小超过限制（最大 {settings.max_audio_file_size_mb}MB）"
                 )
             await out.write(chunk)
+
+
+async def _save_avatar_file_async(
+    file: UploadFile, user_id: int, job_uuid: str
+) -> str:
+    """异步保存头像文件并返回公开URL"""
+    # 获取文件扩展名
+    file_ext = os.path.splitext(file.filename or "avatar.jpg")[1].lower()
+    
+    # 保存路径：使用 clone job 目录
+    avatar_dir = job_dir("clone", user_id=user_id, job_uuid=job_uuid)
+    os.makedirs(avatar_dir, exist_ok=True)
+    
+    avatar_filename = f"avatar{file_ext}"
+    avatar_path = os.path.join(avatar_dir, avatar_filename)
+    
+    # 流式保存，同时检查文件大小
+    max_avatar_size = 5 * 1024 * 1024  # 5MB
+    total_size = 0
+    async with aiofiles.open(avatar_path, "wb") as out:
+        while chunk := await file.read(8192):  # 每次读取 8KB
+            total_size += len(chunk)
+            # 再次验证文件大小（防止客户端伪造 Content-Length）
+            if total_size > max_avatar_size:
+                # 删除已保存的部分文件
+                await out.close()
+                if os.path.exists(avatar_path):
+                    os.remove(avatar_path)
+                raise ValueError("头像文件大小超过限制（最大 5MB）")
+            await out.write(chunk)
+    
+    # 返回公开访问URL
+    return to_public_file_url(avatar_path)
 
 
 async def _create_clone_job(
@@ -134,7 +255,7 @@ async def _create_clone_job(
 )
 async def console_create_clone(
     voice_name: str = Form(...),
-    avatar_url: str = Form(""),
+    avatar_file: UploadFile | None = File(None),  # 头像文件（可选）
     description: str = Form(""),
     tags: str = Form("[]"),  # JSON 字符串数组
     is_public: bool = Form(False),
@@ -144,7 +265,11 @@ async def console_create_clone(
     user: User = Depends(require_console),
 ):
     # 验证音频文件（失败时抛出异常）
-    _validate_audio_file(audio_file)
+    await _validate_audio_file(audio_file)
+
+    # 验证头像文件（如果提供）
+    if avatar_file and avatar_file.filename:
+        await _validate_avatar_file(avatar_file)
 
     # 解析标签
     try:
@@ -166,13 +291,26 @@ async def console_create_clone(
         db,
         user.id,
         voice_name,
-        avatar_url,
+        "",  # avatar_url 先留空，稍后上传文件后更新
         description,
         tags_list,
         is_public,
         remove_background_noise,
     )
     await db.flush()  # 确保 UUID 已生成
+    
+    # 处理头像文件上传
+    avatar_url = ""
+    if avatar_file and avatar_file.filename:
+        try:
+            avatar_url = await _save_avatar_file_async(avatar_file, user.id, job.uuid)
+            job.avatar_url = avatar_url
+        except ValueError as e:
+            # 头像文件上传失败，删除任务
+            await db.delete(job)
+            await db.commit()
+            raise BadRequestException(message=str(e), error=CloneError.INVALID_AUDIO_FORMAT)
+    
     ds_dir = job_dir("clone_dataset", user_id=user.id, job_uuid=job.uuid)
 
     # 异步流式保存文件，避免阻塞事件循环
@@ -241,7 +379,7 @@ async def console_get_clone(
 )
 async def openapi_create_clone(
     voice_name: str = Form(...),
-    avatar_url: str = Form(""),
+    avatar_file: UploadFile | None = File(None),  # 头像文件（可选）
     description: str = Form(""),
     tags: str = Form("[]"),  # JSON 字符串数组
     is_public: bool = Form(False),
@@ -252,7 +390,11 @@ async def openapi_create_clone(
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
 ):
     # 验证音频文件（失败时抛出异常）
-    _validate_audio_file(audio_file)
+    await _validate_audio_file(audio_file)
+
+    # 验证头像文件（如果提供）
+    if avatar_file and avatar_file.filename:
+        await _validate_avatar_file(avatar_file)
 
     # 解析标签
     try:
@@ -287,13 +429,28 @@ async def openapi_create_clone(
         db,
         principal.user.id,
         voice_name,
-        avatar_url,
+        "",  # avatar_url 先留空，稍后上传文件后更新
         description,
         tags_list,
         is_public,
         remove_background_noise,
     )
     await db.flush()  # 确保 UUID 已生成
+    
+    # 处理头像文件上传
+    avatar_url = ""
+    if avatar_file and avatar_file.filename:
+        try:
+            avatar_url = await _save_avatar_file_async(
+                avatar_file, principal.user.id, job.uuid
+            )
+            job.avatar_url = avatar_url
+        except ValueError as e:
+            # 头像文件上传失败，删除任务
+            await db.delete(job)
+            await db.commit()
+            raise BadRequestException(message=str(e), error=CloneError.INVALID_AUDIO_FORMAT)
+    
     ds_dir = job_dir("clone_dataset", user_id=principal.user.id, job_uuid=job.uuid)
 
     # 异步流式保存文件，避免阻塞事件循环
