@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.models import User
 from app.core.responses import success_response
 from app.routers import subscription_router as router
-from app.core.deps import get_db, require_console_user
+from app.core.deps import get_db, require_console
 from app.core.schemas import (
     Response,
     SubscriptionInfo,
@@ -21,10 +21,8 @@ from app.api.controller.subscription import (
 )
 
 
-@router.get(
-    "/subscription", summary="获取订阅信息", response_model=Response[SubscriptionInfo]
-)
-async def get_subscription(user: User = Depends(require_console_user)):
+@router.get("", summary="获取订阅信息", response_model=Response[SubscriptionInfo])
+async def get_subscription(user: User = Depends(require_console)):
     """
     获取当前用户的订阅计划信息
 
@@ -38,14 +36,14 @@ async def get_subscription(user: User = Depends(require_console_user)):
 
 
 @router.post(
-    "/subscription/upgrade",
+    "/upgrade",
     summary="升级订阅",
     response_model=Response[UpgradeSubscriptionOut],
 )
 async def upgrade_subscription(
     payload: UpgradeSubscriptionIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     """
     升级用户的订阅计划

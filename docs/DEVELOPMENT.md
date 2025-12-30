@@ -211,7 +211,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # 3. 本地应用导入
 from app.core.models import User, Voice
-from app.core.deps import get_db, require_console_user
+from app.core.deps import get_db, require_console
 from app.core.schemas import Response, VoiceOut
 from app.routers import voices_console_router as router
 ```

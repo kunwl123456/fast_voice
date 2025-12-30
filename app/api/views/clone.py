@@ -24,8 +24,8 @@ from app.api.services.idempotency import get_idempotency, set_idempotency
 from app.core.deps import (
     get_db,
     OpenAPIPrincipal,
-    require_console_user,
-    require_openapi_principal,
+    require_console,
+    require_openapi,
 )
 
 
@@ -141,7 +141,7 @@ async def console_create_clone(
     remove_background_noise: bool = Form(False),
     audio_file: UploadFile = File(...),  # 单个音频文件
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     # 验证音频文件（失败时抛出异常）
     _validate_audio_file(audio_file)
@@ -218,7 +218,7 @@ async def console_create_clone(
 async def console_get_clone(
     job_uuid: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     job = (
         await db.execute(
@@ -248,7 +248,7 @@ async def openapi_create_clone(
     remove_background_noise: bool = Form(False),
     audio_file: UploadFile = File(...),  # 单个音频文件
     db: AsyncSession = Depends(get_db),
-    principal: OpenAPIPrincipal = Depends(require_openapi_principal),
+    principal: OpenAPIPrincipal = Depends(require_openapi),
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
 ):
     # 验证音频文件（失败时抛出异常）
@@ -343,7 +343,7 @@ async def openapi_create_clone(
 async def openapi_get_clone(
     job_uuid: str,
     db: AsyncSession = Depends(get_db),
-    principal: OpenAPIPrincipal = Depends(require_openapi_principal),
+    principal: OpenAPIPrincipal = Depends(require_openapi),
 ):
     job = (
         await db.execute(

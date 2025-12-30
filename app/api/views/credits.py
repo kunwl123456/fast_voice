@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.models import User
 from app.routers import credits_router as router
 from app.core.responses import success_response
-from app.core.deps import get_db, require_console_user
+from app.core.deps import get_db, require_console
 from app.core.schemas import Response, CreditAccountOut, CreditTxOut
 from app.api.controller.credits import (
     get_user_credit_balance,
@@ -16,11 +16,9 @@ from app.api.controller.credits import (
 )
 
 
-@router.get(
-    "/credits", summary="获取积分余额", response_model=Response[CreditAccountOut]
-)
+@router.get("", summary="获取积分余额", response_model=Response[CreditAccountOut])
 async def get_credits(
-    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console)
 ):
     """
     获取当前用户的积分账户余额
@@ -50,12 +48,12 @@ async def get_credits(
 
 
 @router.get(
-    "/credits/transactions",
+    "/transactions",
     summary="积分交易记录",
     response_model=Response[list[CreditTxOut]],
 )
 async def credit_transactions(
-    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console)
 ):
     """
     获取积分交易流水记录

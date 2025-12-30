@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import User
 from app.routers import api_keys_router as router
-from app.core.deps import get_db, require_console_user
+from app.core.deps import get_db, require_console
 from app.core.responses import success_response, created_response
 from app.core.schemas import Response, ApiKeyListItem, ApiKeyOut, CreateApiKeyIn
 from app.api.controller.api_keys import (
@@ -19,11 +19,9 @@ from app.api.controller.api_keys import (
 )
 
 
-@router.get(
-    "/api-keys", summary="列出 API Key", response_model=Response[ApiKeyListItem]
-)
+@router.get("", summary="列出 API Key", response_model=Response[ApiKeyListItem])
 async def list_api_keys(
-    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console)
 ):
     """
     获取当前用户的所有 API Keys
@@ -49,11 +47,11 @@ async def list_api_keys(
     return success_response("获取成功", api_keys_data)
 
 
-@router.post("/api-keys", summary="创建 API Key", response_model=Response[ApiKeyOut])
+@router.post("", summary="创建 API Key", response_model=Response[ApiKeyOut])
 async def create_api_key(
     payload: CreateApiKeyIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     """
     创建新的 API Key
@@ -86,13 +84,11 @@ async def create_api_key(
     return created_response("API Key 创建成功", api_key_data.model_dump())
 
 
-@router.delete(
-    "/api-keys/{key_id}", summary="删除 API Key", response_model=Response[None]
-)
+@router.delete("/{key_id}", summary="删除 API Key", response_model=Response[None])
 async def delete_api_key(
     key_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     """
     删除指定的 API Key
@@ -120,13 +116,11 @@ async def delete_api_key(
     return success_response("删除成功")
 
 
-@router.post(
-    "/api-keys/rotate", summary="轮换 API Key", response_model=Response[ApiKeyOut]
-)
+@router.post("/rotate", summary="轮换 API Key", response_model=Response[ApiKeyOut])
 async def rotate_api_key(
     payload: CreateApiKeyIn = None,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     """
     轮换 API Key（禁用旧 Key，创建新 Key）

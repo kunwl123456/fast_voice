@@ -34,8 +34,8 @@ from app.core.exceptions import (
 from app.core.deps import (
     get_db,
     OpenAPIPrincipal,
-    require_console_user,
-    require_openapi_principal,
+    require_console,
+    require_openapi,
 )
 
 
@@ -77,7 +77,7 @@ async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TT
             )
         )
     ).scalar_one_or_none()
-    
+
     # 如果没找到，再查找公开的克隆任务（如官方音色）
     if not clone_job:
         clone_job = (
@@ -176,7 +176,7 @@ async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TT
 async def console_create_tts(
     payload: TTSCreatIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     # 创建任务（失败时抛出异常）
     job = await _create_job(db, user.id, payload)
@@ -202,7 +202,7 @@ async def console_create_tts(
 async def console_get_tts(
     job_uuid: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     job = (
         await db.execute(
@@ -227,7 +227,7 @@ async def openapi_create_tts(
     payload: TTSCreatIn,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    principal: OpenAPIPrincipal = Depends(require_openapi_principal),
+    principal: OpenAPIPrincipal = Depends(require_openapi),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     kv = KV.from_settings()
@@ -266,7 +266,7 @@ async def openapi_create_tts(
 async def openapi_get_tts(
     job_uuid: str,
     db: AsyncSession = Depends(get_db),
-    principal: OpenAPIPrincipal = Depends(require_openapi_principal),
+    principal: OpenAPIPrincipal = Depends(require_openapi),
 ):
     job = (
         await db.execute(
@@ -467,7 +467,7 @@ async def _stream_tts_events(job_uuid: str, user_id: int) -> StreamingResponse:
 )
 async def console_stream_tts_events(
     job_uuid: str,
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     return await _stream_tts_events(job_uuid, user.id)
 
@@ -477,6 +477,6 @@ async def console_stream_tts_events(
 )
 async def openapi_stream_tts_events(
     job_uuid: str,
-    principal: OpenAPIPrincipal = Depends(require_openapi_principal),
+    principal: OpenAPIPrincipal = Depends(require_openapi),
 ):
     return await _stream_tts_events(job_uuid, principal.user.id)

@@ -6,20 +6,18 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import User
-from app.core.deps import get_db, require_admin
 from app.core.responses import success_response
 from app.core.schemas import Response, RechargeIn
+from app.core.deps import get_db, get_current_user
 from app.routers import admin_credit_router as router
 from app.admin.controller.credits import recharge_user_credits
 
 
-@router.post(
-    "/credits/recharge", summary="管理员充值积分", response_model=Response[dict]
-)
+@router.post("/recharge", summary="管理员充值积分", response_model=Response[dict])
 async def recharge_credits(
     payload: RechargeIn,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    admin_user: User = Depends(get_current_user),
 ):
     """
     管理员为用户充值积分

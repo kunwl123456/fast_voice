@@ -8,7 +8,7 @@ from fastapi import Depends, File, UploadFile
 from app.core.models import User
 from app.routers import account_router as router
 from app.api.services.account import update_user_field
-from app.core.deps import get_db, require_console_user
+from app.core.deps import get_db, require_console
 from app.core.responses import success_response, created_response
 from app.api.controller.account import (
     login_user,
@@ -80,9 +80,7 @@ async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/me", summary="获取账号信息", response_model=Response[MeOut])
-async def me(
-    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
-):
+async def me(db: AsyncSession = Depends(get_db), user: User = Depends(require_console)):
     """
     获取当前登录用户的账号信息
 
@@ -105,7 +103,7 @@ async def me(
 async def rename(
     payload: RenameIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     """
     修改当前用户的昵称
@@ -123,7 +121,7 @@ async def rename(
 async def upload_avatar(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     """
     上传用户头像图片
@@ -163,7 +161,7 @@ async def upload_avatar(
 async def update_avatar(
     payload: UpdateAvatarIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     """
     更新用户头像 URL（使用外部链接）
@@ -185,7 +183,7 @@ async def update_avatar(
 async def change_password(
     payload: ChangePasswordIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     """
     修改当前用户的登录密码

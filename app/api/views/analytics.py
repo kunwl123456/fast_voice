@@ -9,7 +9,7 @@ from app.core.models import User
 from app.core.responses import success_response
 from app.routers import analytics_router as router
 from app.core.exceptions import BadRequestException
-from app.core.deps import get_db, require_console_user
+from app.core.deps import get_db, require_console
 from app.core.error_codes import AnalyticsError, CommonError
 from app.api.controller.analytics import (
     get_user_dashboard,
@@ -28,7 +28,7 @@ from app.core.schemas import (
     "/dashboard", summary="获取仪表盘信息", response_model=Response[DashboardOut]
 )
 async def get_dashboard(
-    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console)
 ):
     """
     获取用户控制台仪表盘数据
@@ -55,7 +55,7 @@ async def get_dashboard(
 async def get_usage_stats(
     days: int = Query(default=7, description="查询天数（1-30天）"),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     """
     获取 API 使用统计数据（按天聚合）
@@ -95,7 +95,7 @@ async def get_request_logs(
     page: int = Query(default=1, description="页码，从1开始"),
     page_size: int = Query(default=50, description="每页数量，最多200条"),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     """
     获取 API 请求日志（分页查询）

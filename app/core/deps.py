@@ -29,9 +29,11 @@ async def get_db():
         await db.close()
 
 
-async def require_console_user(
-    request: Request, db: AsyncSession = Depends(get_db)
-) -> User:
+async def require_console(request: Request, db: AsyncSession = Depends(get_db)) -> User:
+    # 如果已经在 request.state 中有用户对象，直接返回（避免重复查询）
+    if hasattr(request.state, "current_user"):
+        return request.state.current_user
+
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise AuthenticationException(
@@ -55,14 +57,38 @@ async def require_console_user(
             "鉴权失败：未找到用户", error=CommonError.TOKEN_INVALID
         )
 
+    # 将用户对象存储到 request.state 中，供后续使用
+    request.state.current_user = user
+
     return user
 
 
-def require_admin(user: User = Depends(require_console_user)) -> User:
+def require_admin(user: User = Depends(require_console)) -> User:
     if not user.is_admin:
         raise PermissionException("暂无权限操作！")
 
     return user
+
+
+def get_current_user(request: Request) -> User:
+    """
+    直接从 request.state 获取当前用户
+
+    前提条件：路由必须已经配置了 dependencies（如 require_admin 或 require_console_user）
+
+    使用场景：
+    - 路由器级别已配置 dependencies=[Depends(require_admin)]
+    - 视图函数需要访问当前用户对象
+    - 避免重复解析 token 和查询数据库
+
+    示例：
+        @admin_router.get("/example")
+        async def example(user: User = Depends(get_current_user)):
+            print(f"当前用户: {user.username}")
+    """
+    if not hasattr(request.state, "current_user"):
+        raise AuthenticationException("未找到用户信息，请确保路由已配置身份验证依赖")
+    return request.state.current_user
 
 
 class OpenAPIPrincipal:
@@ -73,18 +99,25 @@ class OpenAPIPrincipal:
         self.api_key = api_key
 
 
-async def require_openapi_principal(
+async def require_openapi(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> OpenAPIPrincipal:
-    """简化的 OpenAPI 鉴权：使用 Authorization Bearer 头部携带 API Key"""
+    """OpenAPI 鉴权：使用 Authorization Bearer 头部携带 API Key"""
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
-        raise AuthenticationException("鉴权失败：缺少鉴权参数")
+        raise AuthenticationException(
+            "鉴权失败：缺少鉴权参数", error=CommonError.TOKEN_INVALID
+        )
 
     api_key_value = auth.removeprefix("Bearer ").strip()
     if not api_key_value:
-        raise AuthenticationException("鉴权失败：缺少鉴权参数")
+        raise AuthenticationException(
+            "鉴权失败：缺少鉴权参数", error=CommonError.TOKEN_INVALID
+        )
+
+    if hasattr(request.state, "current_user"):
+        return OpenAPIPrincipal(user=request.state.current_user, api_key=api_key_value)
 
     # 查询 API Key
     api = (
@@ -92,11 +125,15 @@ async def require_openapi_principal(
     ).scalar_one_or_none()
 
     if not api or not api.is_active:
-        raise AuthenticationException("鉴权失败：API Token不存在或已禁用")
+        raise AuthenticationException(
+            "鉴权失败：API Token不存在或已禁用", error=CommonError.TOKEN_INVALID
+        )
 
     # 检查有效期（使用带时区的时间进行比较）
     if api.expires_at and api.expires_at < datetime.now(ZoneInfo("Asia/Shanghai")):
-        raise AuthenticationException("鉴权失败：API Token已过期")
+        raise AuthenticationException(
+            "鉴权失败：API Token已过期", error=CommonError.TOKEN_INVALID
+        )
 
     # 查询用户
     user = (
@@ -104,6 +141,9 @@ async def require_openapi_principal(
     ).scalar_one_or_none()
 
     if not user:
-        raise AuthenticationException("鉴权失败：未找到用户")
+        raise AuthenticationException(
+            "鉴权失败：未找到用户", error=CommonError.TOKEN_INVALID
+        )
 
+    request.state.current_user = user
     return OpenAPIPrincipal(user=user, api_key=api_key_value)

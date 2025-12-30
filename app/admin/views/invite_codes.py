@@ -7,7 +7,7 @@ from sqlalchemy import select
 from fastapi import Depends, Query
 
 from app.core.models import User, InviteCode
-from app.core.deps import get_db, require_admin
+from app.core.deps import get_db, get_current_user
 from app.routers import admin_invite_codes_router as router
 from app.core.responses import success_response, created_response
 from app.admin.controller.invite_codes import (
@@ -27,7 +27,7 @@ from app.core.schemas import (
 async def create_codes(
     payload: CreateInviteCodeIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_admin),
+    admin_user: User = Depends(get_current_user),
 ):
     """
     批量生成邀请码（仅管理员可用）
@@ -47,7 +47,7 @@ async def create_codes(
     """
     # 生成邀请码（如无权限会抛出异常）
     codes = await create_invite_codes(
-        db, user, payload.count, payload.expires_days, payload.note
+        db, admin_user, payload.count, payload.expires_days, payload.note
     )
 
     # 获取过期时间
@@ -72,7 +72,7 @@ async def create_codes(
 async def list_codes(
     only_unused: bool = Query(False, description="是否仅显示未使用的邀请码"),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_admin),
+    admin_user: User = Depends(get_current_user),
 ):
     """
     获取邀请码列表（仅管理员可用）
@@ -88,7 +88,7 @@ async def list_codes(
     ### 返回内容
     - 邀请码列表（按创建时间倒序）
     """
-    invites = await get_invite_codes(db, user, only_unused)
+    invites = await get_invite_codes(db, admin_user, only_unused)
 
     # 构建响应数据
     result = []
@@ -121,7 +121,7 @@ async def list_codes(
 async def delete_code(
     code_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_admin),
+    admin_user: User = Depends(get_current_user),
 ):
     """
     删除邀请码（仅管理员可用）
@@ -137,6 +137,6 @@ async def delete_code(
     - 已使用的邀请码无法删除（保留历史记录）
     """
     # 删除邀请码（如无权限或不存在会抛出异常）
-    await delete_invite_code(db, user, code_id)
+    await delete_invite_code(db, admin_user, code_id)
 
     return success_response("删除成功")

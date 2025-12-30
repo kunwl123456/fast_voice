@@ -8,7 +8,7 @@ from fastapi import Depends, Query
 
 from app.core.models import User, Voice
 from app.core.responses import success_response
-from app.core.deps import get_db, require_console_user
+from app.core.deps import get_db, require_console
 from app.api.services.storage import to_public_file_url
 from app.routers import voices_console_router as console_router
 from app.routers import voices_openapi_router as openapi_router
@@ -44,10 +44,10 @@ def _voice_out(v: Voice) -> VoiceOut:
 
 
 @console_router.get(
-    "/voices/mine", summary="获取我的音色列表", response_model=Response[List[VoiceOut]]
+    "/mine", summary="获取我的音色列表", response_model=Response[List[VoiceOut]]
 )
 async def my_voices(
-    db: AsyncSession = Depends(get_db), user: User = Depends(require_console_user)
+    db: AsyncSession = Depends(get_db), user: User = Depends(require_console)
 ):
     voices = (
         (
@@ -66,13 +66,13 @@ async def my_voices(
 
 
 @console_router.patch(
-    "/voices/{voice_id}", summary="更新音色信息", response_model=Response[VoiceOut]
+    "/{voice_id}", summary="更新音色信息", response_model=Response[VoiceOut]
 )
 async def update_voice(
     voice_uuid: str,
     payload: VoiceUpdateIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     v = (
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
@@ -108,7 +108,7 @@ async def update_voice(
 
 
 @console_router.patch(
-    "/voices/{voice_uuid}/name",
+    "/{voice_uuid}/name",
     summary="修改音色名字",
     response_model=Response[VoiceOut],
 )
@@ -116,7 +116,7 @@ async def rename_voice(
     voice_uuid: str,
     payload: VoiceRenameIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     v = (
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
@@ -140,19 +140,23 @@ async def rename_voice(
 
 
 @console_router.get(
-    "/voices/official",
+    "/official",
     summary="获取官方音色列表",
     response_model=Response[List[VoiceOut]],
 )
 @openapi_router.get(
-    "/voices/official",
+    "/official",
     summary="获取官方音色列表",
     response_model=Response[List[VoiceOut]],
 )
 async def official_voices(
     db: AsyncSession = Depends(get_db),
-    tags: list[str] | None = Query(default=None, description="标签筛选，可传递多个标签"),
-    tagMode: str = Query("or", description="标签匹配模式: or(满足任一标签), and(同时满足所有标签)"),
+    tags: list[str] | None = Query(
+        default=None, description="标签筛选，可传递多个标签"
+    ),
+    tagMode: str = Query(
+        "or", description="标签匹配模式: or(满足任一标签), and(同时满足所有标签)"
+    ),
     limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
     offset: int = Query(0, ge=0, description="偏移量，用于分页"),
     orderBy: str = Query(
@@ -186,7 +190,7 @@ async def official_voices(
             conditions = []
             for tag in tags:
                 conditions.append(cast(Voice.tags, JSONB).contains([tag]))
-            
+
             if conditions:
                 query = query.where(and_(*conditions))
         else:
@@ -194,7 +198,7 @@ async def official_voices(
             conditions = []
             for tag in tags:
                 conditions.append(cast(Voice.tags, JSONB).contains([tag]))
-            
+
             if conditions:
                 query = query.where(or_(*conditions))
 
@@ -221,30 +225,30 @@ async def official_voices(
     return success_response("获取成功", voices_data)
 
 
-@console_router.get(
-    "/voices/tags", summary="获取音色标签分类", response_model=Response[dict]
-)
-@openapi_router.get(
-    "/voices/tags", summary="获取音色标签分类", response_model=Response[dict]
-)
+@console_router.get("/tags", summary="获取音色标签分类", response_model=Response[dict])
+@openapi_router.get("/tags", summary="获取音色标签分类", response_model=Response[dict])
 async def get_voice_tags():
     return success_response("获取成功", get_tag_categories())
 
 
 @console_router.get(
-    "/voices/public",
+    "/public",
     summary="获取公共音色列表",
     response_model=Response[List[VoiceOut]],
 )
 @openapi_router.get(
-    "/voices/public",
+    "/public",
     summary="获取公共音色列表（社区角色市场）",
     response_model=Response[List[VoiceOut]],
 )
 async def public_voices(
     db: AsyncSession = Depends(get_db),
-    tags: list[str] | None = Query(default=None, description="标签筛选，可传递多个标签"),
-    tagMode: str = Query("or", description="标签匹配模式: or(满足任一标签), and(同时满足所有标签)"),
+    tags: list[str] | None = Query(
+        default=None, description="标签筛选，可传递多个标签"
+    ),
+    tagMode: str = Query(
+        "or", description="标签匹配模式: or(满足任一标签), and(同时满足所有标签)"
+    ),
     limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
     offset: int = Query(0, ge=0, description="偏移量，用于分页"),
     orderBy: str = Query(
@@ -256,10 +260,10 @@ async def public_voices(
     autogame_user = (
         await db.execute(select(User).where(User.email == "admin@autogame.ai"))
     ).scalar_one_or_none()
-    
+
     # 构建查询：只返回社区用户的公开音色（排除官方音色）
     query = select(Voice).where(Voice.is_public.is_(True))
-    
+
     if autogame_user:
         # 排除官方账号的音色
         query = query.where(Voice.owner_user_id != autogame_user.id)
@@ -278,7 +282,7 @@ async def public_voices(
             conditions = []
             for tag in tags:
                 conditions.append(cast(Voice.tags, JSONB).contains([tag]))
-            
+
             if conditions:
                 query = query.where(and_(*conditions))
         else:
@@ -286,7 +290,7 @@ async def public_voices(
             conditions = []
             for tag in tags:
                 conditions.append(cast(Voice.tags, JSONB).contains([tag]))
-            
+
             if conditions:
                 query = query.where(or_(*conditions))
 
@@ -313,12 +317,12 @@ async def public_voices(
 
 
 @console_router.post(
-    "/voices/{voice_uuid}/like", summary="点赞音色", response_model=Response[VoiceOut]
+    "/{voice_uuid}/like", summary="点赞音色", response_model=Response[VoiceOut]
 )
 async def like_voice(
     voice_uuid: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     v = (
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
@@ -338,12 +342,12 @@ async def like_voice(
 
 
 @console_router.delete(
-    "/voices/{voice_uuid}/like", summary="取消点赞", response_model=Response[VoiceOut]
+    "/{voice_uuid}/like", summary="取消点赞", response_model=Response[VoiceOut]
 )
 async def unlike_voice(
     voice_uuid: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_console_user),
+    user: User = Depends(require_console),
 ):
     v = (
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
