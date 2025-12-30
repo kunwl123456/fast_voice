@@ -4,7 +4,7 @@ import logging
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Depends, Query
+from fastapi import Depends, Query, Path
 
 from app.core.models import User, Voice
 from app.core.responses import success_response
@@ -69,7 +69,7 @@ async def my_voices(
     "/{voice_id}", summary="更新音色信息", response_model=Response[VoiceOut]
 )
 async def update_voice(
-    voice_uuid: str,
+    voice_uuid: str = Path(..., alias="voice_id"),
     payload: VoiceUpdateIn,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_console),
