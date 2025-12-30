@@ -67,27 +67,14 @@ async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TT
             data={"max_bytes": settings.max_text_utf8_bytes, "current_bytes": b},
         )
 
-    # 根据 clone_job_id 查找对应的克隆任务
-    # 先尝试查找用户自己的克隆任务
+    # 根据 clone_job_id 查找对应的克隆任务（不限制所有者）
     clone_job = (
         await db.execute(
             select(CloneJob).where(
                 CloneJob.uuid == payload.clone_job_id,
-                CloneJob.user_id == user_id,
             )
         )
     ).scalar_one_or_none()
-
-    # 如果没找到，再查找公开的克隆任务（如官方音色）
-    if not clone_job:
-        clone_job = (
-            await db.execute(
-                select(CloneJob).where(
-                    CloneJob.uuid == payload.clone_job_id,
-                    CloneJob.is_public.is_(True),
-                )
-            )
-        ).scalar_one_or_none()
 
     if not clone_job:
         raise NotFoundException(
@@ -126,12 +113,25 @@ async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TT
             error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
         )
 
-    if voice.owner_user_id != user_id and not voice.is_public:
-        raise PermissionException(
-            message="无权使用该音色",
-            error=VoiceError.VOICE_NOT_FOUND,
-            data={"voice_uuid": voice_uuid},
-        )
+    # 权限检查逻辑：
+    # 1. 如果是用户自己的音色，直接通过
+    # 2. 如果不是自己的，查找音色拥有者
+    if voice.owner_user_id != user_id:
+        # 查找音色拥有者信息
+        voice_owner = (
+            await db.execute(select(User).where(User.id == voice.owner_user_id))
+        ).scalar_one_or_none()
+        
+        # 2. 如果是官方账号的音色，直接通过
+        is_official = voice_owner and voice_owner.email == "admin@autogame.ai"
+        
+        # 3. 如果既不是自己的也不是官方的，检查是否公开
+        if not is_official and not voice.is_public:
+            raise PermissionException(
+                message="无权使用该音色",
+                error=VoiceError.VOICE_NOT_FOUND,
+                data={"voice_uuid": voice_uuid},
+            )
 
     speed_factor = payload.speed_factor if payload.speed_factor is not None else 1.0
     temperature = payload.temperature if payload.temperature is not None else 1.0
