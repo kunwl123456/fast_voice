@@ -230,6 +230,19 @@ class RechargeIn(BaseModel):
     note: str = Field(default="", description="备注说明（可选）")
 
 
+class PlanConfigOut(BaseModel):
+    """订阅计划配置信息"""
+
+    plan: str = Field(description="订阅计划代码（free/pro/enterprise）")
+    name: str = Field(description="计划名称（免费版/专业版/企业版）")
+    monthly_credits: int = Field(description="每月赠送积分")
+    monthly_quota: int = Field(description="月度请求配额")
+    clone_limit: int = Field(description="克隆位限制（-1表示无限）")
+    api_access: bool = Field(description="是否提供API访问")
+    commercial_use: bool = Field(description="是否允许商业使用")
+    priority_support: bool = Field(description="是否提供优先支持")
+
+
 class UpgradeSubscriptionIn(BaseModel):
     """升级订阅"""
 
@@ -319,6 +332,7 @@ class TTSJobOut(JobOut):
 
 class TTSHistoryItemOut(BaseModel):
     """TTS 生成历史记录项"""
+
     id: str = Field(description="任务 UUID")
     status: str = Field(description="任务状态")
     text: str = Field(description="输入文本")
@@ -333,6 +347,7 @@ class TTSHistoryItemOut(BaseModel):
 
 class TTSHistoryListOut(BaseModel):
     """TTS 生成历史列表"""
+
     items: list[TTSHistoryItemOut] = Field(description="历史记录列表")
     total: int = Field(description="总记录数")
     page: int = Field(description="当前页码")

@@ -4,9 +4,8 @@ import asyncio
 import json
 import time
 
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from starlette.responses import StreamingResponse
 from fastapi import Depends, Header, Request, Query
 
@@ -129,10 +128,10 @@ async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TT
         voice_owner = (
             await db.execute(select(User).where(User.id == voice.owner_user_id))
         ).scalar_one_or_none()
-        
+
         # 2. 如果是官方账号的音色，直接通过
         is_official = voice_owner and voice_owner.email == "admin@autogame.ai"
-        
+
         # 3. 如果既不是自己的也不是官方的，检查是否公开
         if not is_official and not voice.is_public:
             raise PermissionException(

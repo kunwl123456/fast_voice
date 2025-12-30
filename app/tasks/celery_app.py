@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import settings
 
@@ -24,6 +25,13 @@ celery_app.conf.update(
     },
     imports=("app.tasks.jobs",),  # 确保 worker 注册任务
 )
+celery_app.conf.beat_schedule = {
+    # 每月1号凌晨3点执行积分续赠
+    "renew-monthly-credits": {
+        "task": "app.tasks.subscription_renewal.renew_monthly_credits_task",
+        "schedule": crontab(day_of_month="1", hour="3", minute="0"),
+    },
+}
 
 # 防止未注册任务：显式导入/发现 app.tasks 下的任务
 celery_app.autodiscover_tasks(["app.tasks"])
