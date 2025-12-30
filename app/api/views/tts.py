@@ -68,6 +68,7 @@ async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TT
         )
 
     # 根据 clone_job_id 查找对应的克隆任务
+    # 先尝试查找用户自己的克隆任务
     clone_job = (
         await db.execute(
             select(CloneJob).where(
@@ -76,6 +77,17 @@ async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TT
             )
         )
     ).scalar_one_or_none()
+    
+    # 如果没找到，再查找公开的克隆任务（如官方音色）
+    if not clone_job:
+        clone_job = (
+            await db.execute(
+                select(CloneJob).where(
+                    CloneJob.uuid == payload.clone_job_id,
+                    CloneJob.is_public.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
 
     if not clone_job:
         raise NotFoundException(
