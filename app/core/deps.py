@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import ApiKey, User
 from app.core.db import AsyncSessionLocal
-from app.core.exceptions import PermissionException, AuthenticationException
+from app.core.error_codes import CommonError
 from app.core.security import decode_access_token
+from app.core.exceptions import PermissionException, AuthenticationException
 
 
 async def get_db():
@@ -33,24 +34,26 @@ async def require_console_user(
 ) -> User:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
-        raise AuthenticationException("鉴权失败：缺少鉴权参数")
+        raise AuthenticationException(
+            "鉴权失败：缺少鉴权参数", error=CommonError.TOKEN_INVALID
+        )
 
     token = auth.removeprefix("Bearer ").strip()
-    try:
-        payload = decode_access_token(token)
-    except ValueError:
-        raise AuthenticationException("鉴权失败：请检查API Key是否存在")
-
+    payload = decode_access_token(token)
     sub = payload.get("sub")
     if not sub or not str(sub).startswith("user:"):
-        raise AuthenticationException("鉴权失败：请检查API Key是否存在")
+        raise AuthenticationException(
+            "鉴权失败：请检查API Key是否存在", error=CommonError.TOKEN_INVALID
+        )
 
     user_uuid = str(sub).split(":", 1)[1]
     user = (
         await db.execute(select(User).where(User.uuid == user_uuid))
     ).scalar_one_or_none()
     if not user:
-        raise AuthenticationException("鉴权失败：未找到用户")
+        raise AuthenticationException(
+            "鉴权失败：未找到用户", error=CommonError.TOKEN_INVALID
+        )
 
     return user
 

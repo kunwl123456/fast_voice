@@ -22,7 +22,6 @@ from app.api.services.storage import (
 )
 from app.core.error_codes import AccountError, InviteCodeError
 from app.core.exceptions import (
-    AuthenticationException,
     BadRequestException,
     ConflictException,
     NotFoundException,
@@ -237,11 +236,11 @@ async def login_user(db: AsyncSession, email: str, password: str) -> tuple[str, 
     - (访问令牌, 用户对象)
 
     ### 异常
-    - AuthenticationException: 用户名或密码错误
+    - BadRequestException: 用户名或密码错误
     """
     u = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if not u or not verify_password(password, str(u.password_hash)):
-        raise AuthenticationException(error=AccountError.LOGIN_FAILED)
+        raise BadRequestException(error=AccountError.LOGIN_FAILED)
 
     token = create_access_token(subject=f"user:{u.uuid}")
     return token, u
@@ -293,7 +292,7 @@ async def change_user_password(
     - AuthenticationException: 原密码错误
     """
     if not verify_password(old_password, user.password_hash):
-        raise AuthenticationException(error=AccountError.OLD_PASSWORD_WRONG)
+        raise BadRequestException(error=AccountError.OLD_PASSWORD_WRONG)
 
     await update_user_field(db, user, "password_hash", hash_password(new_password))
 

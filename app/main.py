@@ -10,15 +10,15 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
 from app.core.models import *  # noqa: F401,F403 (ensure models imported for metadata)
+from app.core.exceptions import *
 from app.core.config import settings
 from app.core.error_codes import CommonError
-from app.core.exceptions import AppException
-from app.core.responses import error_response
 from app.api.services.storage import ensure_dir
 from app.api.services.bootstrap import bootstrap_admin
 from app.core.db import Base, engine, AsyncSessionLocal
 from app.core.middlewares import OpenAPILoggingMiddleware
 from app.core.openapi import setup_openapi, OPENAPI_DESCRIPTION
+from app.core.responses import error_response, unauthorized_response, forbidden_response
 
 # 从统一的路由注册中心导入所有路由
 from app.routers import (
@@ -185,6 +185,18 @@ async def pydantic_validation_exception_handler(_: Request, exc: ValidationError
 async def value_error_handler(_: Request, exc: ValueError):
     """处理 ValueError 并返回统一格式"""
     return error_response(CommonError.BAD_REQUEST, message=str(exc))
+
+
+@_app.exception_handler(AuthenticationException)
+async def authentication_exception_handler(_: Request, exc: AuthenticationException):
+    """处理 AuthenticationException 并返回统一格式"""
+    return unauthorized_response(exc.message, data=exc.data)
+
+
+@_app.exception_handler(PermissionException)
+async def permission_exception_handler(_: Request, exc: PermissionException):
+    """处理 PermissionException 并返回统一格式"""
+    return forbidden_response(exc.message, data=exc.data)
 
 
 @_app.exception_handler(AppException)
