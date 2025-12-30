@@ -24,10 +24,10 @@ credits_router = APIRouter(prefix="/console/credits", tags=["积分管理"])
 subscription_router = APIRouter(prefix="/console/subscription", tags=["订阅管理"])
 
 # 音色克隆 - Console
-clone_console_router = APIRouter(prefix="/console", tags=["音色克隆"])
+clone_console_router = APIRouter(prefix="/console/clone", tags=["音色克隆"])
 
 # TTS - Console
-tts_console_router = APIRouter(prefix="/console", tags=["TTS"])
+tts_console_router = APIRouter(prefix="/console/tts", tags=["TTS"])
 
 # 声音管理 - Console
 voices_console_router = APIRouter(prefix="/console/voices", tags=["声音管理"])
@@ -35,10 +35,10 @@ voices_console_router = APIRouter(prefix="/console/voices", tags=["声音管理"
 
 # ============= OpenAPI 路由 =============
 # 音色克隆 - OpenAPI
-clone_openapi_router = APIRouter(prefix="/openapi", tags=["音色克隆"])
+clone_openapi_router = APIRouter(prefix="/openapi/clone", tags=["音色克隆"])
 
 # TTS - OpenAPI
-tts_openapi_router = APIRouter(prefix="/openapi", tags=["TTS"])
+tts_openapi_router = APIRouter(prefix="/openapi/tts", tags=["TTS"])
 
 # 声音管理 - OpenAPI
 voices_openapi_router = APIRouter(prefix="/openapi/voices", tags=["声音管理"])

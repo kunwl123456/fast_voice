@@ -128,7 +128,7 @@ async def _create_clone_job(
 
 
 @console_router.post(
-    "/clone/jobs",
+    "/jobs",
     summary="创建音色克隆任务",
     response_model=Response[CloneCreateOut],
 )
@@ -211,7 +211,7 @@ async def console_create_clone(
 
 
 @console_router.get(
-    "/clone/jobs/{job_uuid}",
+    "/jobs/{job_uuid}",
     summary="获取音色克隆任务详情",
     response_model=Response[CloneJobOut],
 )
@@ -237,7 +237,7 @@ async def console_get_clone(
 
 
 @openapi_router.post(
-    "/clone/jobs", summary="创建音色克隆任务", response_model=Response[CloneCreateOut]
+    "/jobs", summary="创建音色克隆任务", response_model=Response[CloneCreateOut]
 )
 async def openapi_create_clone(
     voice_name: str = Form(...),
@@ -336,7 +336,7 @@ async def openapi_create_clone(
 
 
 @openapi_router.get(
-    "/clone/jobs/{job_uuid}",
+    "/jobs/{job_uuid}",
     summary="获取音色克隆任务详情",
     response_model=Response[CloneJobOut],
 )

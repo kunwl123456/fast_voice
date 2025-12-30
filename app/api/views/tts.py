@@ -170,9 +170,7 @@ async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TT
     return job
 
 
-@console_router.post(
-    "/tts/jobs", summary="创建 TTS 任务", response_model=Response[JobOut]
-)
+@console_router.post("/jobs", summary="创建 TTS 任务", response_model=Response[JobOut])
 async def console_create_tts(
     payload: TTSCreatIn,
     db: AsyncSession = Depends(get_db),
@@ -195,7 +193,7 @@ async def console_create_tts(
 
 
 @console_router.get(
-    "/tts/jobs/{job_uuid}",
+    "/jobs/{job_uuid}",
     summary="获取 TTS 任务详情",
     response_model=Response[TTSJobOut],
 )
@@ -220,9 +218,7 @@ async def console_get_tts(
     return success_response("获取成功", tts_data.model_dump())
 
 
-@openapi_router.post(
-    "/tts/jobs", summary="创建 TTS 任务", response_model=Response[JobOut]
-)
+@openapi_router.post("/jobs", summary="创建 TTS 任务", response_model=Response[JobOut])
 async def openapi_create_tts(
     payload: TTSCreatIn,
     request: Request,
@@ -259,7 +255,7 @@ async def openapi_create_tts(
 
 
 @openapi_router.get(
-    "/tts/jobs/{job_uuid}",
+    "/jobs/{job_uuid}",
     summary="获取 TTS 任务详情",
     response_model=Response[TTSJobOut],
 )
@@ -462,9 +458,7 @@ async def _stream_tts_events(job_uuid: str, user_id: int) -> StreamingResponse:
     )
 
 
-@console_router.get(
-    "/tts/jobs/{job_uuid}/events", summary="SSE 流式推送 TTS 任务状态更新"
-)
+@console_router.get("/jobs/{job_uuid}/events", summary="SSE 流式推送 TTS 任务状态更新")
 async def console_stream_tts_events(
     job_uuid: str,
     user: User = Depends(require_console),
@@ -472,9 +466,7 @@ async def console_stream_tts_events(
     return await _stream_tts_events(job_uuid, user.id)
 
 
-@openapi_router.get(
-    "/tts/jobs/{job_uuid}/events", summary="SSE 流式推送 TTS 任务状态更新"
-)
+@openapi_router.get("/jobs/{job_uuid}/events", summary="SSE 流式推送 TTS 任务状态更新")
 async def openapi_stream_tts_events(
     job_uuid: str,
     principal: OpenAPIPrincipal = Depends(require_openapi),
