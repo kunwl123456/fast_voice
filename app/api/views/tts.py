@@ -187,6 +187,7 @@ async def console_create_tts(
     job = await _create_job(db, user.id, payload)
 
     await db.flush()  # 确保 UUID 已生成
+    await db.commit()  # 提交到数据库，确保 worker 能查询到
     # 异步：如果没有 celery broker，开发时允许直接同步跑（方便联调）
     if settings.celery_broker_url:
         from app.tasks.celery_app import celery_app
@@ -245,6 +246,7 @@ async def openapi_create_tts(
     job = await _create_job(db, principal.user.id, payload)
 
     await db.flush()  # 确保 UUID 已生成
+    await db.commit()  # 提交到数据库，确保 worker 能查询到
     set_idempotency(
         kv,
         principal.user.id,
