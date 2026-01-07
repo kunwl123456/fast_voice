@@ -23,6 +23,9 @@ credits_router = APIRouter(prefix="/console/credits", tags=["积分管理"])
 # 订阅管理
 subscription_router = APIRouter(prefix="/console/subscription", tags=["订阅管理"])
 
+# 支付管理
+payment_router = APIRouter(prefix="/console/payments", tags=["支付管理"])
+
 # 音色克隆 - Console
 clone_console_router = APIRouter(prefix="/console/clone", tags=["音色克隆"])
 
@@ -62,6 +65,11 @@ admin_invite_codes_router = APIRouter(
 docs_router = APIRouter(prefix="/docs", tags=["文档"])
 
 
+# ============= Webhook 路由 =============
+# Stripe Webhook（不需要认证）
+webhook_router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
+
+
 # ============= 导出所有路由器 =============
 __all__ = [
     # Console 路由
@@ -70,6 +78,7 @@ __all__ = [
     "analytics_router",
     "credits_router",
     "subscription_router",
+    "payment_router",
     "clone_console_router",
     "tts_console_router",
     "voices_console_router",
@@ -80,6 +89,8 @@ __all__ = [
     # Admin 路由
     "admin_credit_router",
     "admin_invite_codes_router",
+    # Webhook 路由
+    "webhook_router",
     # 文档路由
     "docs_router",
 ]

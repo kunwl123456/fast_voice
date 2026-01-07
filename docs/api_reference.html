@@ -1,0 +1,1616 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fast_voice API 参考文档</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "Microsoft YaHei", sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background: #f5f7fa;
+    }
+    .container {
+      display: flex;
+      min-height: 100vh;
+    }
+    
+    /* 左侧导航 */
+    .sidebar {
+      width: 260px;
+      background: #2c3e50;
+      color: #ecf0f1;
+      position: fixed;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 20px 0;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    }
+    .sidebar h2 {
+      padding: 0 20px;
+      margin-bottom: 20px;
+      font-size: 20px;
+      color: #fff;
+    }
+    .sidebar nav a {
+      display: block;
+      padding: 10px 20px;
+      color: #bdc3c7;
+      text-decoration: none;
+      border-left: 3px solid transparent;
+      transition: all 0.2s;
+    }
+    .sidebar nav a:hover {
+      background: #34495e;
+      color: #fff;
+      border-left-color: #3498db;
+    }
+    .sidebar nav a.active {
+      background: #34495e;
+      color: #fff;
+      border-left-color: #3498db;
+    }
+    
+    /* 主内容区 */
+    .main-content {
+      margin-left: 260px;
+      flex: 1;
+      padding: 40px;
+      max-width: 1400px;
+    }
+    
+    h1 {
+      font-size: 32px;
+      margin-bottom: 10px;
+      color: #2c3e50;
+    }
+    h2 {
+      font-size: 24px;
+      margin: 50px 0 20px;
+      padding: 15px 0;
+      border-bottom: 3px solid #3498db;
+      color: #2c3e50;
+      background: linear-gradient(to right, #ecf0f1 0%, transparent 100%);
+      padding-left: 15px;
+    }
+    h3 {
+      font-size: 20px;
+      margin: 30px 0 15px;
+      color: #34495e;
+      padding-left: 10px;
+      border-left: 4px solid #3498db;
+    }
+    h4 {
+      font-size: 16px;
+      margin: 20px 0 10px;
+      color: #7f8c8d;
+      font-weight: 600;
+    }
+    
+    /* 卡片样式 */
+    .api-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      border: 1px solid #e8e8e8;
+    }
+    
+    /* 表格 */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      background: #fff;
+      border: 1px solid #e8e8e8;
+    }
+    table th {
+      background: #34495e;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #fff;
+      border-bottom: 2px solid #2c3e50;
+    }
+    table td {
+      padding: 12px;
+      border-bottom: 1px solid #ecf0f1;
+      vertical-align: top;
+    }
+    table tr:last-child td {
+      border-bottom: none;
+    }
+    table tr:hover {
+      background: #f8f9fa;
+    }
+    
+    /* 代码块 */
+    code {
+      background: #f8f9fa;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: "Monaco", "Menlo", "Consolas", monospace;
+      font-size: 13px;
+      color: #e74c3c;
+      border: 1px solid #e8e8e8;
+    }
+    pre {
+      background: #2c3e50;
+      color: #ecf0f1;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 16px 0;
+      font-family: "Monaco", "Menlo", "Consolas", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      border: 1px solid #34495e;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+      border: none;
+    }
+    
+    /* 标签 */
+    .method-tag {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 8px;
+      letter-spacing: 0.5px;
+    }
+    .method-get { background: #27ae60; color: #fff; }
+    .method-post { background: #3498db; color: #fff; }
+    .method-patch { background: #f39c12; color: #fff; }
+    .method-delete { background: #e74c3c; color: #fff; }
+    
+    /* 信息框 */
+    .info-box {
+      background: #ebf5fb;
+      border-left: 4px solid #3498db;
+      padding: 16px;
+      margin: 16px 0;
+      border-radius: 4px;
+    }
+    .info-box ul {
+      margin-left: 20px;
+      margin-top: 8px;
+    }
+    .error-box {
+      background: #fadbd8;
+      border-left: 4px solid #e74c3c;
+      padding: 16px;
+      margin: 16px 0;
+      border-radius: 4px;
+    }
+    
+    /* 字段说明列表 */
+    .field-list {
+      background: #f8f9fa;
+      padding: 15px 20px;
+      border-radius: 6px;
+      margin: 15px 0;
+      border: 1px solid #e8e8e8;
+    }
+    .field-list p {
+      margin: 8px 0;
+      line-height: 1.8;
+    }
+    .field-list code {
+      background: #fff;
+      color: #2c3e50;
+      font-weight: 600;
+    }
+    
+    /* 响应式 */
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 200px;
+      }
+      .main-content {
+        margin-left: 200px;
+        padding: 20px;
+      }
+    }
+    
+    /* 滚动条样式 */
+    .sidebar::-webkit-scrollbar {
+      width: 8px;
+    }
+    .sidebar::-webkit-scrollbar-track {
+      background: #2c3e50;
+    }
+    .sidebar::-webkit-scrollbar-thumb {
+      background: #34495e;
+      border-radius: 4px;
+    }
+    .sidebar::-webkit-scrollbar-thumb:hover {
+      background: #4a6278;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- 左侧导航 -->
+    <aside class="sidebar">
+      <h2>fast_voice API</h2>
+      <nav>
+        <a href="#基础信息">基础信息</a>
+        <a href="#账号管理">账号管理</a>
+        <a href="#订阅管理">订阅管理</a>
+        <a href="#音色管理">音色管理</a>
+        <a href="#文本转语音">文本转语音（TTS）</a>
+        <a href="#声音克隆">声音克隆</a>
+        <a href="#控制台概览">控制台概览</a>
+        <a href="#积分管理">积分管理</a>
+        <a href="#API Key管理">API Key 管理</a>
+        <a href="#邀请码管理">邀请码管理</a>
+        <a href="#错误响应">错误响应</a>
+        <a href="#调试提示">调试提示</a>
+      </nav>
+    </aside>
+    
+    <!-- 主内容 -->
+    <main class="main-content">
+      <h1>fast_voice API 参考文档</h1>
+      <p>本文档整理 <code>app/views</code> 目录中的所有对外接口（Console 与 OpenAPI），所有字段说明参考 <code>app/schemas.py</code>。</p>
+      
+      <!-- 基础信息 -->
+      <section id="基础信息">
+        <h2>基础信息</h2>
+        
+        <div class="api-card">
+          <h3>鉴权方式</h3>
+          <ul>
+            <li><strong>Console 路由</strong>：<code>/console/**</code>，使用用户 JWT（通过登录接口获取）</li>
+            <li><strong>OpenAPI 路由</strong>：<code>/openapi/**</code>，使用 Bearer Token（API Key 以 <code>sk-</code> 开头）</li>
+          </ul>
+        </div>
+        
+        <div class="api-card">
+          <h3>通用响应格式 (Response)</h3>
+          <pre><code>{
+  "message": "提示信息",
+  "data": { ...响应体数据... }
+}</code></pre>
+          
+          <div class="field-list">
+            <p><code>message</code> (string)：提示信息</p>
+            <p><code>data</code> (object)：响应体数据</p>
+          </div>
+        </div>
+        
+        <div class="api-card">
+          <h3>状态码说明</h3>
+          <table>
+            <tr>
+              <th>状态码</th>
+              <th>说明</th>
+            </tr>
+            <tr><td>200 OK</td><td>请求成功</td></tr>
+            <tr><td>400 Bad Request</td><td>请求参数错误</td></tr>
+            <tr><td>401 Unauthorized</td><td>未授权/Token 无效</td></tr>
+            <tr><td>403 Forbidden</td><td>禁止访问</td></tr>
+            <tr><td>404 Not Found</td><td>资源不存在</td></tr>
+            <tr><td>429 Too Many Requests</td><td>请求频率超限</td></tr>
+            <tr><td>500 Server Error</td><td>服务器内部错误</td></tr>
+          </table>
+        </div>
+      </section>
+      
+      <!-- 账号管理 -->
+      <section id="账号管理">
+        <h2>账号管理</h2>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-post">POST</span> 用户注册</h3>
+          <h4>接口地址</h4>
+          <code>POST /auth/register</code>
+          
+          <h4>请求头</h4>
+          <code>Content-Type: application/json</code>
+          
+          <h4>请求参数 (RegisterIn)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>email</code></td>
+              <td>string</td>
+              <td>是</td>
+              <td>用户邮箱地址</td>
+            </tr>
+            <tr>
+              <td><code>password</code></td>
+              <td>string</td>
+              <td>是</td>
+              <td>登录密码（6-72个字符）</td>
+            </tr>
+            <tr>
+              <td><code>display_name</code></td>
+              <td>string</td>
+              <td>否</td>
+              <td>显示名称（最多100个字符，可选）</td>
+            </tr>
+            <tr>
+              <td><code>invite_code</code></td>
+              <td>string</td>
+              <td>是</td>
+              <td>邀请码（必须）</td>
+            </tr>
+          </table>
+          
+          <h4>返回数据 (RegisterOut)</h4>
+          <pre><code>{
+  "message": "注册成功",
+  "data": {
+    "id": "user-uuid",
+    "email": "user@example.com",
+    "display_name": "用户昵称",
+    "avatar_url": "",
+    "is_admin": false,
+    "subscription_plan": "free",
+    "subscription_ends_at": null,
+    "credit_balance": 10000
+  }
+}</code></pre>
+          
+          <div class="field-list">
+            <p><code>id</code> (string)：用户 UUID</p>
+            <p><code>email</code> (string)：邮箱地址</p>
+            <p><code>display_name</code> (string)：显示名称</p>
+            <p><code>avatar_url</code> (string)：头像 URL</p>
+            <p><code>is_admin</code> (boolean)：是否管理员</p>
+            <p><code>subscription_plan</code> (string)：订阅计划（free/pro/enterprise）</p>
+            <p><code>subscription_ends_at</code> (string|null)：订阅到期时间</p>
+            <p><code>credit_balance</code> (integer)：积分余额</p>
+          </div>
+          
+          <h4>CURL 示例</h4>
+          <pre><code>curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123",
+    "display_name": "测试用户",
+    "invite_code": "your-invite-code"
+  }'</code></pre>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-post">POST</span> 用户登录</h3>
+          <h4>接口地址</h4>
+          <code>POST /auth/login</code>
+          
+          <h4>请求参数 (LoginIn)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>email</code></td>
+              <td>string</td>
+              <td>是</td>
+              <td>用户邮箱地址</td>
+            </tr>
+            <tr>
+              <td><code>password</code></td>
+              <td>string</td>
+              <td>是</td>
+              <td>登录密码</td>
+            </tr>
+          </table>
+          
+          <h4>返回数据 (LoginOut)</h4>
+          <pre><code>{
+  "message": "登录成功",
+  "data": {
+    "id": "user-uuid",
+    "email": "user@example.com",
+    "display_name": "用户昵称",
+    "avatar_url": "",
+    "is_admin": false,
+    "subscription_plan": "free",
+    "subscription_ends_at": null,
+    "credit_balance": 10000,
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "bearer"
+  }
+}</code></pre>
+          
+          <div class="field-list">
+            <p><code>id</code> (string)：用户 UUID</p>
+            <p><code>email</code> (string)：邮箱地址</p>
+            <p><code>display_name</code> (string)：显示名称</p>
+            <p><code>avatar_url</code> (string)：头像 URL</p>
+            <p><code>is_admin</code> (boolean)：是否管理员</p>
+            <p><code>subscription_plan</code> (string)：订阅计划（free/pro/enterprise）</p>
+            <p><code>subscription_ends_at</code> (string|null)：订阅到期时间</p>
+            <p><code>credit_balance</code> (integer)：积分余额</p>
+            <p><code>access_token</code> (string)：JWT 访问令牌</p>
+            <p><code>token_type</code> (string)：令牌类型（默认 bearer）</p>
+          </div>
+          
+          <h4>CURL 示例</h4>
+          <pre><code>curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123"
+  }'</code></pre>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 获取账号信息</h3>
+          <h4>接口地址</h4>
+          <code>GET /me</code>
+          
+          <h4>请求头</h4>
+          <code>Authorization: Bearer &lt;jwt_token&gt;</code>
+          
+          <h4>返回数据 (MeOut)</h4>
+          <pre><code>{
+  "message": "获取成功",
+  "data": {
+    "id": "user-uuid",
+    "email": "user@example.com",
+    "display_name": "用户昵称",
+    "avatar_url": "",
+    "is_admin": false,
+    "subscription_plan": "free",
+    "subscription_ends_at": null,
+    "credit_balance": 10000
+  }
+}</code></pre>
+          
+          <div class="field-list">
+            <p><code>id</code> (string)：用户 UUID</p>
+            <p><code>email</code> (string)：邮箱地址</p>
+            <p><code>display_name</code> (string)：显示名称</p>
+            <p><code>avatar_url</code> (string)：头像 URL</p>
+            <p><code>is_admin</code> (boolean)：是否管理员</p>
+            <p><code>subscription_plan</code> (string)：订阅计划（free/pro/enterprise）</p>
+            <p><code>subscription_ends_at</code> (string|null)：订阅到期时间</p>
+            <p><code>credit_balance</code> (integer)：积分余额</p>
+          </div>
+        </div>
+      </section>
+      
+        <div class="api-card">
+          <h3><span class="method-tag method-post">POST</span> 上传头像</h3>
+          <h4>接口地址</h4>
+          <code>POST /me/avatar/upload</code>
+          
+          <h4>请求头</h4>
+          <code>Authorization: Bearer &lt;jwt_token&gt;</code><br>
+          <code>Content-Type: multipart/form-data</code>
+          
+          <h4>请求参数</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>file</code></td>
+              <td>file</td>
+              <td>是</td>
+              <td>头像图片文件</td>
+            </tr>
+          </table>
+          
+          <h4>文件要求</h4>
+          <ul>
+            <li><strong>支持格式</strong>: JPG, JPEG, PNG, GIF, WebP</li>
+            <li><strong>文件大小</strong>: 最大 5MB</li>
+            <li><strong>Content-Type</strong>: 必须是 image/* 类型</li>
+          </ul>
+          
+          <h4>返回数据</h4>
+          <p>返回 MeOut 格式数据</p>
+          
+          <h4>CURL 示例</h4>
+          <pre><code>curl -X POST http://localhost:8000/me/avatar/upload \
+  -H "Authorization: Bearer &lt;jwt_token&gt;" \
+  -F "file=@/path/to/avatar.jpg"</code></pre>
+        </div>
+      </section>
+      
+      <!-- 订阅管理 -->
+      <section id="订阅管理">
+        <h2>订阅管理</h2>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 查询订阅信息</h3>
+          <h4>接口地址</h4>
+          <code>GET /subscription</code>
+          
+          <h4>返回数据 (SubscriptionInfo)</h4>
+          <div class="field-list">
+            <p><code>plan</code> (string)：订阅计划代码（free/pro/enterprise）</p>
+            <p><code>plan_name</code> (string)：计划名称（免费版/专业版/企业版）</p>
+            <p><code>status</code> (string)：订阅状态（active/expired/cancelled）</p>
+            <p><code>ends_at</code> (string|null)：订阅到期时间</p>
+            <p><code>features</code> (object)：功能特性列表</p>
+          </div>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 获取所有订阅计划配置</h3>
+          <h4>接口地址</h4>
+          <code>GET /subscription/plans</code>
+          
+          <h4>请求头</h4>
+          <p>不需要认证（公开接口）</p>
+          
+          <h4>返回数据 (PlanConfigOut[])</h4>
+          <pre><code>{
+  "message": "获取成功",
+  "data": [
+    {
+      "plan": "free",
+      "name": "免费版",
+      "monthly_credits": 1000,
+      "monthly_quota": 100,
+      "clone_limit": 3,
+      "api_access": false,
+      "commercial_use": false,
+      "priority_support": false
+    }
+  ]
+}</code></pre>
+          
+          <div class="field-list">
+            <p><code>plan</code> (string)：订阅计划代码（free/pro/enterprise）</p>
+            <p><code>name</code> (string)：计划名称</p>
+            <p><code>monthly_credits</code> (integer)：每月赠送积分</p>
+            <p><code>monthly_quota</code> (integer)：月度请求配额</p>
+            <p><code>clone_limit</code> (integer)：克隆位限制（-1表示无限）</p>
+            <p><code>api_access</code> (boolean)：是否提供API访问</p>
+            <p><code>commercial_use</code> (boolean)：是否允许商业使用</p>
+            <p><code>priority_support</code> (boolean)：是否提供优先支持</p>
+          </div>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-post">POST</span> 升级订阅</h3>
+          <h4>接口地址</h4>
+          <code>POST /subscription/upgrade</code>
+          
+          <h4>请求参数 (UpgradeSubscriptionIn)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>plan</code></td>
+              <td>string</td>
+              <td>是</td>
+              <td>目标计划：pro或enterprise</td>
+            </tr>
+            <tr>
+              <td><code>months</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>订阅月数（1-12，默认1）</td>
+            </tr>
+          </table>
+        </div>
+      </section>
+      
+      <!-- 音色管理 -->
+      <section id="音色管理">
+        <h2>音色管理</h2>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 获取官方音色列表</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/voices/official</code><br>
+          <code>GET /openapi/voices/official</code>
+          
+          <h4>请求参数</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>tags</code></td>
+              <td>array[string]</td>
+              <td>否</td>
+              <td>标签筛选（可传递多个标签，满足任一即返回）</td>
+            </tr>
+            <tr>
+              <td><code>limit</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>每页返回数量（1-100，默认20）</td>
+            </tr>
+            <tr>
+              <td><code>offset</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>偏移量，用于分页（默认0）</td>
+            </tr>
+            <tr>
+              <td><code>orderBy</code></td>
+              <td>string</td>
+              <td>否</td>
+              <td>排序字段：likes(点赞)/usage(使用次数)/chars(生成字符数)/createdAt(创建时间，默认)</td>
+            </tr>
+          </table>
+          
+          <h4>返回数据</h4>
+          <div class="field-list">
+            <strong>VoiceOut 字段说明：</strong>
+            <p><code>id</code> (string)：音色 UUID</p>
+            <p><code>name</code> (string)：音色名称</p>
+            <p><code>avatar_url</code> (string)：音色头像 URL</p>
+            <p><code>description</code> (string)：音色描述</p>
+            <p><code>tags</code> (array[string])：音色标签列表</p>
+            <p><code>is_public</code> (boolean)：是否公开</p>
+            <p><code>preview_audio_url</code> (string)：预览音频 URL</p>
+            <p><code>clone_job_uuid</code> (string)：克隆任务 UUID（用于 TTS）</p>
+            <p><code>likes_count</code> (integer)：点赞数</p>
+            <p><code>generated_chars_count</code> (integer)：生成字符数</p>
+            <p><code>usage_count</code> (integer)：使用次数</p>
+            <p><code>created_at</code> (string)：创建时间</p>
+          </div>
+          
+          <h4>CURL 示例</h4>
+          <pre><code># 获取前20个官方音色
+curl -X GET "http://localhost:8000/console/voices/official?limit=20" \
+  -H "Authorization: Bearer &lt;jwt_token&gt;"
+
+# 筛选中文女声，按点赞数排序
+curl -X GET "http://localhost:8000/console/voices/official?tags=中文&tags=女&orderBy=likes" \
+  -H "Authorization: Bearer &lt;jwt_token&gt;"</code></pre>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 获取音色标签</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/voices/tags</code><br>
+          <code>GET /openapi/voices/tags</code>
+          
+          <h4>返回数据</h4>
+          <pre><code>{
+  "message": "获取成功",
+  "data": {
+    "语言": ["中文", "英文", "日语", "韩语"],
+    "性别": ["男", "女"],
+    "年龄": ["少年", "青年", "中年", "老年"],
+    "情感": ["温柔", "活泼", "沉稳", "冷酷"]
+  }
+}</code></pre>
+        </div>
+      </section>
+      
+      <!-- 文本转语音 -->
+      <section id="文本转语音">
+        <h2>文本转语音（TTS）</h2>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-post">POST</span> 创建 TTS 任务</h3>
+          <h4>接口地址</h4>
+          <code>POST /console/tts/jobs</code><br>
+          <code>POST /openapi/tts/jobs</code>
+          
+          <h4>请求头</h4>
+          <pre><code># Console
+Authorization: Bearer &lt;jwt_token&gt;
+Content-Type: application/json
+
+# OpenAPI
+Authorization: Bearer sk-&lt;api_key&gt;
+Content-Type: application/json
+Idempotency-Key: &lt;unique_key&gt;  # OpenAPI 必填</code></pre>
+          
+          <h4>请求参数 (TTSCreatIn)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>clone_job_id</code></td>
+              <td>string</td>
+              <td>是</td>
+              <td>克隆任务的 UUID（/console/clone/jobs 返回的 data.id）</td>
+            </tr>
+            <tr>
+              <td><code>text</code></td>
+              <td>string</td>
+              <td>是</td>
+              <td>要转换的文本</td>
+            </tr>
+            <tr>
+              <td><code>speed_factor</code></td>
+              <td>float</td>
+              <td>否</td>
+              <td>语速，可选；未提供则使用默认值 1.0</td>
+            </tr>
+            <tr>
+              <td><code>temperature</code></td>
+              <td>float</td>
+              <td>否</td>
+              <td>采样温度，可选；未提供则使用默认值 1.0</td>
+            </tr>
+            <tr>
+              <td><code>top_k</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>采样 top_k，可选；默认 5</td>
+            </tr>
+            <tr>
+              <td><code>top_p</code></td>
+              <td>float</td>
+              <td>否</td>
+              <td>采样 top_p，可选；默认 1.0</td>
+            </tr>
+            <tr>
+              <td><code>webhook_url</code></td>
+              <td>string</td>
+              <td>否</td>
+              <td>Webhook 回调地址，任务完成时调用；可选（最多512字符）</td>
+            </tr>
+          </table>
+          
+          <h4>返回数据 (JobOut)</h4>
+          <pre><code>{
+  "message": "TTS 任务创建成功",
+  "data": {
+    "id": "job-uuid",
+    "status": "queued",
+    "error": ""
+  }
+}</code></pre>
+          
+          <div class="field-list">
+            <p><code>id</code> (string)：任务 UUID</p>
+            <p><code>status</code> (string)：任务状态（queued/running/succeeded/failed）</p>
+            <p><code>error</code> (string)：错误信息（如有）</p>
+          </div>
+          
+          <h4>CURL 示例</h4>
+          <pre><code># Console 路由
+curl -X POST http://localhost:8000/console/tts/jobs \
+  -H "Authorization: Bearer &lt;jwt_token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clone_job_id": "clone-job-uuid",
+    "text": "你好，欢迎使用 fast_voice",
+    "speed_factor": 1.0
+  }'
+
+# OpenAPI 路由
+curl -X POST http://localhost:8000/openapi/tts/jobs \
+  -H "Authorization: Bearer sk-xxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -d '{
+    "clone_job_id": "clone-job-uuid",
+    "text": "你好，欢迎使用 fast_voice"
+  }'</code></pre>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 查询 TTS 任务</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/tts/jobs/{job_uuid}</code><br>
+          <code>GET /openapi/tts/jobs/{job_uuid}</code>
+          
+          <h4>返回数据 (TTSJobOut)</h4>
+          <div class="field-list">
+            <p><code>id</code> (string)：任务 UUID</p>
+            <p><code>status</code> (string)：任务状态</p>
+            <p><code>error</code> (string)：错误信息（如有）</p>
+            <p><code>voice_uuid</code> (string)：使用的音色 UUID</p>
+            <p><code>text_utf8_bytes</code> (integer)：文本字节数（UTF-8编码）</p>
+            <p><code>cost_credits</code> (integer)：消耗的积分数</p>
+            <p><code>tags</code> (array[string])：音色标签</p>
+            <p><code>speed_factor</code> (float)：语速系数</p>
+            <p><code>temperature</code> (float)：采样温度</p>
+            <p><code>top_k</code> (integer)：采样 top_k 参数</p>
+            <p><code>top_p</code> (float)：采样 top_p 参数</p>
+            <p><code>output_audio_url</code> (string)：输出音频 URL</p>
+          </div>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 实时订阅 TTS 状态（SSE）</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/tts/jobs/{job_uuid}/events</code><br>
+          <code>GET /openapi/tts/jobs/{job_uuid}/events</code>
+          
+          <h4>请求头</h4>
+          <pre><code>Authorization: Bearer &lt;jwt_token or api_key&gt;
+Accept: text/event-stream</code></pre>
+          
+          <div class="info-box">
+            <strong>SSE 事件类型：</strong>
+            <ul>
+              <li><strong>status</strong>：任务状态变更</li>
+              <li><strong>ping</strong>：心跳（默认15秒）</li>
+              <li><strong>complete</strong>：任务完成</li>
+              <li><strong>error</strong>：错误</li>
+              <li><strong>timeout</strong>：超时（默认300秒）</li>
+            </ul>
+          </div>
+          
+          <h4>CURL 示例</h4>
+          <pre><code># PowerShell
+curl.exe -N "http://localhost:8000/console/tts/jobs/&lt;job_uuid&gt;/events" `
+  -H "Accept: text/event-stream" `
+  -H "Authorization: Bearer &lt;jwt_token&gt;" `
+  --http1.1
+
+# Bash/Linux
+curl --no-buffer "http://localhost:8000/console/tts/jobs/&lt;job_uuid&gt;/events" \
+  -H "Accept: text/event-stream" \
+  -H "Authorization: Bearer &lt;jwt_token&gt;" \
+  --http1.1</code></pre>
+        </div>
+      </section>
+      
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 获取 TTS 生成历史列表</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/tts/history</code><br>
+          <code>GET /openapi/tts/history</code>
+          
+          <h4>请求头</h4>
+          <code>Authorization: Bearer &lt;jwt_token or api_key&gt;</code>
+          
+          <h4>请求参数 (Query)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>page</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>页码（从1开始，默认1）</td>
+            </tr>
+            <tr>
+              <td><code>page_size</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>每页数量（1-100，默认20）</td>
+            </tr>
+          </table>
+          
+          <h4>返回数据 (TTSHistoryListOut)</h4>
+          <div class="field-list">
+            <strong>TTSHistoryItemOut 字段：</strong>
+            <p><code>id</code> (string)：任务 UUID</p>
+            <p><code>status</code> (string)：任务状态</p>
+            <p><code>text</code> (string)：输入文本</p>
+            <p><code>voice_uuid</code> (string)：使用的音色 UUID</p>
+            <p><code>voice_name</code> (string)：音色名称</p>
+            <p><code>voice_avatar_url</code> (string)：音色头像 URL</p>
+            <p><code>output_audio_url</code> (string)：输出音频 URL</p>
+            <p><code>cost_credits</code> (integer)：消耗的积分数</p>
+            <p><code>created_at</code> (string)：创建时间（ISO 8601格式）</p>
+            <p><code>error</code> (string)：错误信息（如有）</p>
+            <br>
+            <strong>分页字段：</strong>
+            <p><code>items</code> (array)：历史记录列表</p>
+            <p><code>total</code> (integer)：总记录数</p>
+            <p><code>page</code> (integer)：当前页码</p>
+            <p><code>page_size</code> (integer)：每页数量</p>
+          </div>
+          
+          <h4>CURL 示例</h4>
+          <pre><code>curl -X GET "http://localhost:8000/console/tts/history?page=1&page_size=20" \
+  -H "Authorization: Bearer &lt;jwt_token&gt;"</code></pre>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-delete">DELETE</span> 删除 TTS 生成历史记录</h3>
+          <h4>接口地址</h4>
+          <code>DELETE /console/tts/history/{job_uuid}</code><br>
+          <code>DELETE /openapi/tts/history/{job_uuid}</code>
+          
+          <h4>请求头</h4>
+          <code>Authorization: Bearer &lt;jwt_token or api_key&gt;</code>
+          
+          <h4>返回数据</h4>
+          <pre><code>{
+  "message": "删除成功",
+  "data": {
+    "job_uuid": "job-uuid"
+  }
+}</code></pre>
+          
+          <h4>CURL 示例</h4>
+          <pre><code>curl -X DELETE http://localhost:8000/console/tts/history/&lt;job_uuid&gt; \
+  -H "Authorization: Bearer &lt;jwt_token&gt;"</code></pre>
+        </div>
+      </section>
+      
+      <!-- 声音克隆 -->
+      <section id="声音克隆">
+        <h2>声音克隆</h2>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-post">POST</span> 创建克隆任务</h3>
+          <h4>接口地址</h4>
+          <code>POST /console/clone/jobs</code><br>
+          <code>POST /openapi/clone/jobs</code>
+          
+          <h4>请求头</h4>
+          <pre><code>Authorization: Bearer &lt;jwt_token or api_key&gt;
+Content-Type: multipart/form-data
+Idempotency-Key: &lt;unique_key&gt;  # OpenAPI 必填</code></pre>
+          
+          <h4>请求参数 (CloneCreateIn + File)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>voice_name</code></td>
+              <td>string</td>
+              <td>是</td>
+              <td>音色名称</td>
+            </tr>
+            <tr>
+              <td><code>avatar_url</code></td>
+              <td>string</td>
+              <td>否</td>
+              <td>头像 URL（可选）</td>
+            </tr>
+            <tr>
+              <td><code>description</code></td>
+              <td>string</td>
+              <td>否</td>
+              <td>音色描述（可选）</td>
+            </tr>
+            <tr>
+              <td><code>tags</code></td>
+              <td>array</td>
+              <td>否</td>
+              <td>标签列表（JSON 数组）</td>
+            </tr>
+            <tr>
+              <td><code>is_public</code></td>
+              <td>boolean</td>
+              <td>否</td>
+              <td>是否公开（默认为 false）</td>
+            </tr>
+            <tr>
+              <td><code>remove_background_noise</code></td>
+              <td>boolean</td>
+              <td>否</td>
+              <td>是否去除背景噪音（默认为 false）</td>
+            </tr>
+            <tr>
+              <td><code>audio_file</code></td>
+              <td>file</td>
+              <td>是</td>
+              <td>音频文件（multipart 上传）</td>
+            </tr>
+          </table>
+          
+          <h4>返回数据 (CloneCreateOut)</h4>
+          <div class="field-list">
+            <p><code>id</code> (string)：任务 UUID</p>
+            <p><code>status</code> (string)：任务状态</p>
+            <p><code>error</code> (string)：错误信息（如有）</p>
+            <p><code>voice_name</code> (string)：音色名称</p>
+            <p><code>avatar_url</code> (string)：头像 URL</p>
+            <p><code>description</code> (string)：音色描述</p>
+            <p><code>tags</code> (array[string])：标签列表</p>
+            <p><code>user_id</code> (string)：用户 UUID</p>
+            <p><code>created_at</code> (string)：创建时间</p>
+            <p><code>preview_audio_url</code> (string)：预览音频 URL</p>
+          </div>
+          
+          <h4>CURL 示例</h4>
+          <pre><code>curl -X POST http://localhost:8000/console/clone/jobs \
+  -H "Authorization: Bearer &lt;jwt_token&gt;" \
+  -F "voice_name=我的音色" \
+  -F "description=音色描述" \
+  -F "tags=[\"中文\",\"女\"]" \
+  -F "is_public=false" \
+  -F "audio_file=@/path/to/audio.wav"</code></pre>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 查询克隆任务</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/clone/jobs/{job_uuid}</code><br>
+          <code>GET /openapi/clone/jobs/{job_uuid}</code>
+          
+          <h4>返回数据 (CloneJobOut)</h4>
+          <div class="field-list">
+            <p><code>id</code> (string)：任务 UUID</p>
+            <p><code>status</code> (string)：任务状态</p>
+            <p><code>error</code> (string)：错误信息（如有）</p>
+            <p><code>voice_name</code> (string)：音色名称</p>
+            <p><code>avatar_url</code> (string)：头像 URL</p>
+            <p><code>description</code> (string)：音色描述</p>
+            <p><code>tags</code> (array[string])：标签列表</p>
+            <p><code>user_id</code> (string)：用户 UUID</p>
+            <p><code>created_at</code> (string)：创建时间</p>
+            <p><code>preview_audio_url</code> (string)：预览音频 URL</p>
+            <p><code>result_voice_uuid</code> (string|null)：克隆成功后生成的音色 UUID</p>
+          </div>
+        </div>
+      </section>
+      
+      <!-- 控制台概览 -->
+      <section id="控制台概览">
+        <h2>控制台概览</h2>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> Dashboard 概览</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/analytics/dashboard</code>
+          
+          <h4>返回数据 (DashboardOut)</h4>
+          <div class="field-list">
+            <p><code>user_id</code> (string)：用户 UUID</p>
+            <p><code>email</code> (string)：邮箱地址</p>
+            <p><code>plan_name</code> (string)：订阅计划名称</p>
+            <p><code>plan_status</code> (string)：订阅状态（active/expired）</p>
+            <p><code>monthly_usage</code> (integer)：本月使用量（API 调用次数）</p>
+            <p><code>monthly_quota</code> (integer)：月度配额（根据计划不同）</p>
+            <p><code>usage_percent</code> (float)：使用率百分比</p>
+            <p><code>next_billing_date</code> (string)：下一个账单日期</p>
+            <p><code>credit_balance</code> (integer)：积分余额</p>
+            <p><code>clone_count</code> (integer)：已克隆音色数量</p>
+            <p><code>clone_limit</code> (integer)：音色克隆上限（-1表示无限）</p>
+            <p><code>api_access_enabled</code> (boolean)：是否启用 API 访问</p>
+          </div>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 每日用量统计</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/analytics/usage-stats</code>
+          
+          <h4>请求参数 (Query)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>days</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>查询天数（1-30天，默认7）</td>
+            </tr>
+          </table>
+          
+          <h4>返回数据 (UsageStatsOut)</h4>
+          <div class="field-list">
+            <p><code>date</code> (string)：日期（YYYY-MM-DD 格式）</p>
+            <p><code>total_requests</code> (integer)：总请求数</p>
+            <p><code>successful_requests</code> (integer)：成功请求数（状态码 200）</p>
+            <p><code>failed_requests</code> (integer)：失败请求数</p>
+          </div>
+        </div>
+      </section>
+      
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> API 请求日志</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/analytics/request-logs</code>
+          
+          <h4>请求头</h4>
+          <code>Authorization: Bearer &lt;jwt_token&gt;</code>
+          
+          <h4>请求参数 (Query)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>page</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>页码（从1开始，默认1）</td>
+            </tr>
+            <tr>
+              <td><code>page_size</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>每页数量（1-200，默认50）</td>
+            </tr>
+          </table>
+          
+          <h4>返回数据 (PaginatedRequestLogs)</h4>
+          <div class="field-list">
+            <strong>RequestLogOut 字段：</strong>
+            <p><code>id</code> (integer)：日志 ID</p>
+            <p><code>timestamp</code> (string)：请求时间</p>
+            <p><code>endpoint</code> (string)：请求路径</p>
+            <p><code>method</code> (string)：HTTP 方法</p>
+            <p><code>status_code</code> (integer)：响应状态码</p>
+            <p><code>latency_ms</code> (integer)：响应延迟（毫秒）</p>
+            <p><code>response_size</code> (integer)：响应大小（字节）</p>
+            <p><code>error_message</code> (string)：错误消息（如有）</p>
+            <br>
+            <strong>分页字段：</strong>
+            <p><code>items</code> (array)：日志列表</p>
+            <p><code>total</code> (integer)：总记录数</p>
+            <p><code>page</code> (integer)：当前页码</p>
+            <p><code>page_size</code> (integer)：每页条数</p>
+            <p><code>total_pages</code> (integer)：总页数</p>
+            <p><code>has_next</code> (boolean)：是否有下一页</p>
+            <p><code>has_prev</code> (boolean)：是否有上一页</p>
+          </div>
+        </div>
+      </section>
+      
+      <!-- 积分管理 -->
+      <section id="积分管理">
+        <h2>积分管理</h2>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 查询积分余额</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/credits/balance</code>
+          
+          <h4>返回数据 (CreditAccountOut)</h4>
+          <div class="field-list">
+            <p><code>user_id</code> (string)：用户 UUID</p>
+            <p><code>balance</code> (integer)：积分余额</p>
+          </div>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 查询积分流水</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/credits/transactions</code>
+          
+          <h4>返回数据 (CreditTxOut)</h4>
+          <div class="field-list">
+            <p><code>id</code> (integer)：交易 ID</p>
+            <p><code>tx_type</code> (string)：交易类型（subscription/recharge/consume/refund）</p>
+            <p><code>amount</code> (integer)：金额（正数为收入，负数为支出）</p>
+            <p><code>ref_type</code> (string)：关联类型</p>
+            <p><code>ref_id</code> (string)：关联 ID</p>
+            <p><code>note</code> (string)：备注说明</p>
+            <p><code>created_at</code> (string)：交易时间</p>
+          </div>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-post">POST</span> 管理员充值</h3>
+          <h4>接口地址</h4>
+          <code>POST /console/credits/admin/recharge</code>
+          
+          <h4>请求参数 (RechargeIn)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>user_id</code></td>
+              <td>string</td>
+              <td>是</td>
+              <td>目标用户的 UUID</td>
+            </tr>
+            <tr>
+              <td><code>amount</code></td>
+              <td>integer</td>
+              <td>是</td>
+              <td>充值金额（必须为正整数）</td>
+            </tr>
+            <tr>
+              <td><code>note</code></td>
+              <td>string</td>
+              <td>否</td>
+              <td>备注说明（可选）</td>
+            </tr>
+          </table>
+        </div>
+      </section>
+      
+      <!-- API Key 管理 -->
+      <section id="API Key管理">
+        <h2>API Key 管理</h2>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 获取 API Key 列表</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/api-keys</code>
+          
+          <h4>返回数据 (ApiKeyListItem)</h4>
+          <div class="field-list">
+            <p><code>id</code> (integer)：API Key ID</p>
+            <p><code>name</code> (string)：密钥名称</p>
+            <p><code>api_key_masked</code> (string)：脱敏显示的 Key（如 sk-...）</p>
+            <p><code>is_active</code> (boolean)：是否激活</p>
+            <p><code>expires_at</code> (string|null)：过期时间（null 表示永久有效）</p>
+            <p><code>created_at</code> (string)：创建时间</p>
+          </div>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-post">POST</span> 创建 API Key</h3>
+          <h4>接口地址</h4>
+          <code>POST /console/api-keys</code>
+          
+          <h4>请求参数 (CreateApiKeyIn)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>name</code></td>
+              <td>string</td>
+              <td>否</td>
+              <td>密钥名称（可选，最多100字符）</td>
+            </tr>
+            <tr>
+              <td><code>expires_days</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>有效期天数（null表示永不过期，最小1天）</td>
+            </tr>
+          </table>
+          
+          <h4>返回数据 (ApiKeyOut)</h4>
+          <div class="field-list">
+            <p><code>api_key</code> (string)：完整的 API Key（仅创建时显示一次）</p>
+            <p><code>expires_at</code> (string|null)：过期时间（null 表示永不过期）</p>
+          </div>
+          
+          <h4>CURL 示例</h4>
+          <pre><code>curl -X POST http://localhost:8000/console/api-keys \
+  -H "Authorization: Bearer &lt;jwt_token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production Key",
+    "expires_days": 365
+  }'</code></pre>
+        </div>
+      </section>
+      
+      <!-- 邀请码管理 -->
+      <section id="邀请码管理">
+        <h2>邀请码管理（管理员）</h2>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-post">POST</span> 生成邀请码</h3>
+          <h4>接口地址</h4>
+          <code>POST /console/invite-codes/</code>
+          
+          <h4>请求头</h4>
+          <code>Authorization: Bearer &lt;admin_jwt_token&gt;</code><br>
+          <code>Content-Type: application/json</code>
+          
+          <h4>请求参数 (CreateInviteCodeIn)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>count</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>生成数量（1-100，默认1）</td>
+            </tr>
+            <tr>
+              <td><code>expires_days</code></td>
+              <td>integer</td>
+              <td>否</td>
+              <td>有效期天数（null表示永不过期）</td>
+            </tr>
+            <tr>
+              <td><code>note</code></td>
+              <td>string</td>
+              <td>否</td>
+              <td>备注说明（最多255字符）</td>
+            </tr>
+          </table>
+          
+          <h4>返回数据 (BatchInviteCodesOut)</h4>
+          <pre><code>{
+  "message": "邀请码生成成功",
+  "data": {
+    "codes": ["CODE-ABC123", "CODE-DEF456", "CODE-GHI789"],
+    "count": 3,
+    "expires_at": "2026-12-25 10:00:00"
+  }
+}</code></pre>
+          
+          <div class="field-list">
+            <p><code>codes</code> (array[string])：生成的邀请码列表</p>
+            <p><code>count</code> (integer)：生成数量</p>
+            <p><code>expires_at</code> (string|null)：过期时间（null 表示永不过期）</p>
+          </div>
+          
+          <h4>CURL 示例</h4>
+          <pre><code>curl -X POST http://localhost:8000/console/invite-codes/ \
+  -H "Authorization: Bearer &lt;admin_jwt_token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "count": 5,
+    "expires_days": 30,
+    "note": "测试邀请码"
+  }'</code></pre>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-get">GET</span> 获取邀请码列表</h3>
+          <h4>接口地址</h4>
+          <code>GET /console/invite-codes/</code>
+          
+          <h4>请求头</h4>
+          <code>Authorization: Bearer &lt;admin_jwt_token&gt;</code>
+          
+          <h4>请求参数 (Query)</h4>
+          <table>
+            <tr>
+              <th>参数</th>
+              <th>类型</th>
+              <th>必填</th>
+              <th>说明</th>
+            </tr>
+            <tr>
+              <td><code>only_unused</code></td>
+              <td>boolean</td>
+              <td>否</td>
+              <td>是否仅显示未使用的邀请码（默认 false）</td>
+            </tr>
+          </table>
+          
+          <h4>返回数据 (InviteCodeOut[])</h4>
+          <div class="field-list">
+            <p><code>id</code> (integer)：邀请码 ID</p>
+            <p><code>code</code> (string)：邀请码</p>
+            <p><code>is_used</code> (boolean)：是否已使用</p>
+            <p><code>used_by_email</code> (string|null)：使用者邮箱</p>
+            <p><code>expires_at</code> (string|null)：过期时间</p>
+            <p><code>note</code> (string)：备注说明</p>
+            <p><code>created_at</code> (string)：创建时间</p>
+            <p><code>used_at</code> (string|null)：使用时间</p>
+          </div>
+          
+          <h4>CURL 示例</h4>
+          <pre><code># 获取所有邀请码
+curl -X GET http://localhost:8000/console/invite-codes/ \
+  -H "Authorization: Bearer &lt;admin_jwt_token&gt;"
+
+# 仅获取未使用的邀请码
+curl -X GET "http://localhost:8000/console/invite-codes/?only_unused=true" \
+  -H "Authorization: Bearer &lt;admin_jwt_token&gt;"</code></pre>
+        </div>
+        
+        <div class="api-card">
+          <h3><span class="method-tag method-delete">DELETE</span> 删除邀请码</h3>
+          <h4>接口地址</h4>
+          <code>DELETE /console/invite-codes/{code_id}</code>
+          
+          <h4>请求头</h4>
+          <code>Authorization: Bearer &lt;admin_jwt_token&gt;</code>
+          
+          <h4>返回数据</h4>
+          <pre><code>{
+  "message": "删除成功",
+  "data": null
+}</code></pre>
+          
+          <h4>CURL 示例</h4>
+          <pre><code>curl -X DELETE http://localhost:8000/console/invite-codes/1 \
+  -H "Authorization: Bearer &lt;admin_jwt_token&gt;"</code></pre>
+        </div>
+      </section>
+      
+      <!-- 错误响应 -->
+      <section id="错误响应">
+        <h2>错误响应示例</h2>
+        
+        <div class="error-box">
+          <h4>400 Bad Request</h4>
+          <pre><code>{
+  "message": "请求参数错误",
+  "data": {
+    "detail": "text 字段不能为空"
+  }
+}</code></pre>
+        </div>
+        
+        <div class="error-box">
+          <h4>401 Unauthorized</h4>
+          <pre><code>{
+  "message": "未授权",
+  "data": {
+    "detail": "Token 无效或已过期"
+  }
+}</code></pre>
+        </div>
+        
+        <div class="error-box">
+          <h4>404 Not Found</h4>
+          <pre><code>{
+  "message": "资源不存在",
+  "data": {
+    "job_uuid": "xxx"
+  }
+}</code></pre>
+        </div>
+      </section>
+      
+      <!-- 调试提示 -->
+      <section id="调试提示">
+        <h2>调试提示</h2>
+        
+        <div class="info-box">
+          <h4>1. SSE 测试建议</h4>
+          <ul>
+            <li>使用 <code>curl --no-buffer ... --http1.1</code> 避免缓冲</li>
+            <li>可看到周期性的 <code>ping</code> 心跳（默认15秒）</li>
+            <li>配置项：<code>tts_stream_heartbeat_seconds</code>（心跳间隔）、<code>tts_stream_timeout_seconds</code>（超时时间）</li>
+          </ul>
+          
+          <h4>2. 鉴权说明</h4>
+          <ul>
+            <li>Console 路由使用用户 JWT（通过 <code>/auth/login</code> 获取）</li>
+            <li>OpenAPI 路由使用 API Key（通过 <code>/console/api-keys</code> 创建，以 <code>sk-</code> 开头）</li>
+          </ul>
+          
+          <h4>3. 幂等键</h4>
+          <ul>
+            <li>OpenAPI 的 TTS 和克隆任务创建接口需要 <code>Idempotency-Key</code> 头部</li>
+            <li>相同幂等键的重复请求会返回同一任务</li>
+            <li>幂等键有效期：3600秒（1小时）</li>
+          </ul>
+          
+          <h4>4. 任务状态</h4>
+          <ul>
+            <li><code>queued</code>：已入队等待处理</li>
+            <li><code>running</code>：正在处理</li>
+            <li><code>succeeded</code>：成功完成</li>
+            <li><code>failed</code>：处理失败</li>
+          </ul>
+          
+          <h4>5. 文件访问</h4>
+          <ul>
+            <li>生成的音频通过 <code>/files/{relative_path}</code> 访问</li>
+            <li>例如：<code>/files/tts/1_job-uuid/output.mp3</code></li>
+            <li>音色预览：<code>/files/voices/xxx/preview.mp3</code></li>
+          </ul>
+          
+          <h4>6. 计费规则</h4>
+          <ul>
+            <li>按输入文本的 UTF-8 字节数计费</li>
+            <li>默认单价：1 积分/字节（可配置）</li>
+            <li>最大文本长度：4000 字节（可配置）</li>
+            <li>失败任务会全额退款</li>
+          </ul>
+          
+          <h4>7. 订阅计划对比</h4>
+          <table>
+            <tr>
+              <th>计划</th>
+              <th>月度积分</th>
+              <th>月度配额</th>
+              <th>克隆位</th>
+              <th>API访问</th>
+              <th>商业使用</th>
+              <th>优先支持</th>
+            </tr>
+            <tr>
+              <td>免费版</td>
+              <td>1,000</td>
+              <td>100次</td>
+              <td>3个</td>
+              <td>❌</td>
+              <td>❌</td>
+              <td>❌</td>
+            </tr>
+            <tr>
+              <td>专业版</td>
+              <td>10,000</td>
+              <td>5,000次</td>
+              <td>20个</td>
+              <td>❌</td>
+              <td>✅</td>
+              <td>❌</td>
+            </tr>
+            <tr>
+              <td>企业版</td>
+              <td>100,000</td>
+              <td>500,000次</td>
+              <td>无限</td>
+              <td>✅</td>
+              <td>✅</td>
+              <td>✅</td>
+            </tr>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  
+  <script>
+    // 平滑滚动
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          
+          // 更新激活状态
+          document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
+          this.classList.add('active');
+        }
+      });
+    });
+    
+    // 滚动监听更新导航
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.sidebar nav a');
+    
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(section => {
+        const sectionTop = section.offsetTop;
+        const sectionHeight = section.clientHeight;
+        if (pageYOffset >= (sectionTop - 100)) {
+          current = section.getAttribute('id');
+        }
+      });
+      
+      navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === '#' + current) {
+          link.classList.add('active');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

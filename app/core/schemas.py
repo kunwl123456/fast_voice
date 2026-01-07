@@ -431,3 +431,89 @@ class BatchInviteCodesOut(BaseModel):
     @field_serializer("expires_at")
     def serialize_datetime(self, dt: datetime | str | None, _info) -> str | None:
         return format_datetime(dt)
+
+
+# ============================================================================
+# Stripe 支付相关 Schemas
+# ============================================================================
+
+
+class CreatePaymentIntentIn(BaseModel):
+    """创建支付意图的请求参数"""
+
+    payment_type: str = Field(description="支付类型：credit_recharge 或 subscription")
+    amount: float = Field(gt=0, description="支付金额")
+    currency: str | None = Field(
+        default=None,
+        description="货币类型：usd、cny、hkd 等。不指定则根据支付方式自动选择（card默认usd，alipay/wechat_pay默认cny）"
+    )
+    payment_method: str | None = Field(
+        default=None, 
+        description="指定支付方式：card（信用卡）、alipay（支付宝）、wechat_pay（微信支付），不指定则自动选择"
+    )
+    credits_amount: int | None = Field(
+        default=None, description="充值的积分数量（仅用于积分充值）"
+    )
+    subscription_plan: str | None = Field(
+        default=None, description="订阅计划（仅用于订阅支付）：pro 或 enterprise"
+    )
+    subscription_months: int | None = Field(
+        default=None, ge=1, le=12, description="订阅月数（仅用于订阅支付，1-12个月）"
+    )
+
+
+class CreatePaymentIntentOut(BaseModel):
+    """创建支付意图的响应"""
+
+    payment_id: str = Field(description="支付订单ID")
+    client_secret: str = Field(description="客户端密钥（用于前端确认支付）")
+    publishable_key: str = Field(description="Stripe 公钥（用于前端初始化）")
+    amount: float = Field(description="支付金额（美元）")
+    currency: str = Field(description="货币类型")
+    return_url: str = Field(description="支付完成后返回的 URL（前端确认支付时需要）")
+
+
+class PaymentStatusOut(BaseModel):
+    """支付状态查询响应"""
+
+    payment_id: str = Field(description="支付订单ID")
+    status: str = Field(description="支付状态")
+    payment_type: str = Field(description="支付类型")
+    amount: float = Field(description="支付金额（美元）")
+    currency: str = Field(description="货币类型")
+    credits_amount: int | None = Field(description="充值的积分数量")
+    subscription_plan: str | None = Field(description="订阅计划")
+    subscription_months: int | None = Field(description="订阅月数")
+    error_message: str | None = Field(description="错误信息")
+    created_at: datetime | str = Field(description="创建时间")
+    completed_at: datetime | str | None = Field(description="完成时间")
+
+    @field_serializer("created_at", "completed_at")
+    def serialize_datetime_fields(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
+
+
+class PaymentHistoryOut(BaseModel):
+    """支付历史记录"""
+
+    payment_id: str = Field(description="支付订单ID")
+    payment_type: str = Field(description="支付类型")
+    amount: float = Field(description="支付金额（美元）")
+    currency: str = Field(description="货币类型")
+    status: str = Field(description="支付状态")
+    credits_amount: int | None = Field(description="充值的积分数量")
+    subscription_plan: str | None = Field(description="订阅计划")
+    subscription_months: int | None = Field(description="订阅月数")
+    created_at: datetime | str = Field(description="创建时间")
+    completed_at: datetime | str | None = Field(description="完成时间")
+
+    @field_serializer("created_at", "completed_at")
+    def serialize_datetime_fields(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
+
+
+class StripeConfigOut(BaseModel):
+    """Stripe 配置信息（公开信息）"""
+
+    publishable_key: str = Field(description="Stripe 公钥")
+    currency: str = Field(default="usd", description="货币类型")

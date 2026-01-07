@@ -27,6 +27,7 @@ from app.routers import (
     analytics_router,
     credits_router,
     subscription_router,
+    payment_router,
     clone_console_router,
     clone_openapi_router,
     tts_console_router,
@@ -35,6 +36,7 @@ from app.routers import (
     voices_openapi_router,
     admin_credit_router,
     admin_invite_codes_router,
+    webhook_router,
     docs_router,
 )
 
@@ -44,9 +46,11 @@ import app.api.views.api_keys  # noqa: F401
 import app.api.views.analytics  # noqa: F401
 import app.api.views.credits  # noqa: F401
 import app.api.views.subscription  # noqa: F401
+import app.api.views.payment  # noqa: F401
 import app.api.views.clone  # noqa: F401
 import app.api.views.tts  # noqa: F401
 import app.api.views.voices  # noqa: F401
+import app.api.views.webhook  # noqa: F401
 import app.api.views.docs  # noqa: F401
 import app.admin.views.credit  # noqa: F401
 import app.admin.views.invite_codes  # noqa: F401
@@ -266,6 +270,7 @@ async def _startup():
 # 注册所有路由到应用
 _app.include_router(account_router)
 _app.include_router(subscription_router)
+_app.include_router(payment_router)
 _app.include_router(api_keys_router)
 _app.include_router(credits_router)
 _app.include_router(admin_credit_router)
@@ -277,6 +282,7 @@ _app.include_router(tts_console_router)
 _app.include_router(tts_openapi_router)
 _app.include_router(clone_console_router)
 _app.include_router(clone_openapi_router)
+_app.include_router(webhook_router)
 _app.include_router(docs_router)
 
 # 导出 app 实例供 uvicorn 使用

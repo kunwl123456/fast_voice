@@ -53,5 +53,11 @@ class Settings(BaseSettings):
     db_pool_timeout_seconds: int = 30
     db_pool_recycle_seconds: int = 1800
 
+    # Stripe 支付配置
+    stripe_secret_key: str | None = None  # Stripe 密钥（sk_test_... 或 sk_live_...）
+    stripe_publishable_key: str | None = None  # Stripe 公钥（pk_test_... 或 pk_live_...）
+    stripe_webhook_secret: str | None = None  # Stripe Webhook 签名密钥
+    stripe_payment_return_url: str = "https://your-domain.com/payment/return"  # 支付完成后返回的 URL
+
 
 settings = Settings()

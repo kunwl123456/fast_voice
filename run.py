@@ -44,6 +44,14 @@ if __name__ == "__main__":
     os.environ.setdefault("VOICE_SVC_BASE_URL", "http://192.168.1.5:4000")
     os.environ.setdefault("VOICE_TTS_BASE_URL", "http://192.168.1.5:7000")
 
+    # Stripe 支付配置（请替换为你的实际密钥）
+    # 测试环境密钥示例：sk_test_... 和 pk_test_...
+    # 生产环境密钥示例：sk_live_... 和 pk_live_...
+    os.environ.setdefault("STRIPE_SECRET_KEY", "")  # 请填入你的 Stripe 密钥
+    os.environ.setdefault("STRIPE_PUBLISHABLE_KEY", "")  # 请填入你的 Stripe 公钥
+    os.environ.setdefault("STRIPE_WEBHOOK_SECRET", "")  # 请填入你的 Webhook 签名密钥
+    os.environ.setdefault("STRIPE_PAYMENT_RETURN_URL", "http://localhost:9000/payment/return")  # 支付返回URL
+
     # 开发环境标识
     os.environ.setdefault("ENV", "dev")
 
