@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     # 管理员账户
     admin_email: str
     admin_password: str
+    pro_email: str
+    pro_password: str
 
     # 每字符消耗的积分数
     credit_price_per_utf8_byte: int = 1

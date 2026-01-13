@@ -98,14 +98,15 @@ async def bootstrap_admin(db: AsyncSession) -> None:
 
 async def bootstrap_pro(db: AsyncSession) -> None:
     """初始化 Pro 账户（包含积分账户和API Key）"""
-    pro_email = "pro@autogame.ai"
-    pro_password = "123456"
+    pro_email = settings.pro_email
+    pro_password = settings.pro_password
+
     pro_user = (
         await db.execute(select(User).where(User.email == pro_email))
     ).scalar_one_or_none()
 
     if pro_user:
-        # 管理员已存在，更新密码、头像等信息（确保与配置一致）
+        # Pro 账号已存在，更新密码、头像等信息（确保与配置一致）
         print(f"ℹ️  Pro 账号已存在：{pro_email}")
 
         # 更新密码（每次启动时同步配置文件中的密码）
@@ -161,7 +162,7 @@ async def bootstrap_pro(db: AsyncSession) -> None:
 
     # 提交事务
     await db.commit()
-    print(f"✅ 管理员账号创建完成：{settings.admin_email}")
-    print("   - 初始积分：100,000")
+    print(f"✅ Pro 账号创建完成：{settings.admin_email}")
+    print("   - 初始积分：10,000")
     print(f"   - API Key: {api_key_value}")
 
