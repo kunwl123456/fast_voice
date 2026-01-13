@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -21,37 +20,20 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
+from app.core.constants import (
+    JobStatus,
+    TxType,
+    OrderType,
+    PaymentType,
+    PaymentStatus,
+    PaymentProvider,
+    OrderStatus,
+)
 
 
 def format_timezone() -> datetime:
     """返回 Asia/Shanghai 时区的当前时间（timezone-aware）"""
     return datetime.now(ZoneInfo("Asia/Shanghai"))
-
-
-class JobStatus(str, enum.Enum):
-    """异步任务状态机（TTS/克隆共用）。"""
-
-    queued = "queued"  # 已入队等待 worker
-    running = "running"  # worker 正在处理
-    succeeded = "succeeded"  # 成功产出结果
-    failed = "failed"  # 失败（并触发退款/记录错误）
-
-
-class TxType(str, enum.Enum):
-    """积分流水类型。"""
-
-    recharge = "recharge"  # 充值
-    consume = "consume"  # 消费（创建任务时预扣）
-    refund = "refund"  # 退款（任务失败自动回滚）
-    subscription = "subscription"  # 订阅赠送
-
-
-class SubscriptionPlan(str, enum.Enum):
-    """订阅计划类型。"""
-
-    free = "free"  # 免费版：每月少量积分
-    pro = "pro"  # 专业版：每月一定量积分、商业使用权
-    enterprise = "enterprise"  # 企业版：无限克隆位、大量积分、API访问
 
 
 class User(Base):
@@ -71,11 +53,11 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(100), default="")  # 展示名
     avatar_url: Mapped[str] = mapped_column(String(512), default="")  # 头像链接
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)  # 管理员：可调账
-    subscription_plan: Mapped[SubscriptionPlan] = mapped_column(
-        Enum(SubscriptionPlan, name="subscription_plan"),
-        default=SubscriptionPlan.free,
+    subscription_plan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subscription_plans.id"),
+        nullable=True,
         index=True,
-    )  # 订阅计划
+    )  # 订阅计划ID（外键关联到 subscription_plans 表）
     subscription_ends_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )  # 订阅到期时间（免费版为空）
@@ -84,6 +66,9 @@ class User(Base):
     )  # 创建时间
 
     # 关联关系
+    subscription_plan: Mapped["SubscriptionPlanConfig | None"] = relationship(
+        "SubscriptionPlanConfig", foreign_keys=[subscription_plan_id]
+    )
     api_keys: Mapped[list["ApiKey"]] = relationship(back_populates="user")
     credit_account: Mapped["CreditAccount"] = relationship(
         back_populates="user", uselist=False
@@ -370,22 +355,165 @@ class InviteCode(Base):
     )  # 使用时间
 
 
-class PaymentStatus(str, enum.Enum):
-    """支付状态枚举"""
+class SubscriptionPlanConfig(Base):
+    """
+    表：subscription_plans
+    用途：订阅计划配置（从代码常量落库，供计费/展示/运营使用）
+    """
 
-    pending = "pending"  # 待支付
-    processing = "processing"  # 处理中
-    succeeded = "succeeded"  # 支付成功
-    failed = "failed"  # 支付失败
-    canceled = "canceled"  # 已取消
-    refunded = "refunded"  # 已退款
+    __tablename__ = "subscription_plans"
+    __table_args__ = (
+        UniqueConstraint("plan_code", name="uq_subscription_plans_plan_code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # 自增主键
+
+    plan_code: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        index=True,
+    )  # 计划编码：free/pro/enterprise（对外稳定标识）
+    name: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )  # 展示名（如：免费版/专业版/企业版）
+
+    monthly_credits: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )  # 每月赠送积分（>=0）
+    monthly_quota: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )  # 每月请求配额（次数，>=0）
+    clone_limit: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )  # 克隆位上限：-1=无限，否则>=0
+
+    api_access: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )  # 是否允许 API 访问
+    commercial_use: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )  # 是否允许商业使用
+    priority_support: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )  # 是否享受优先支持
+
+    monthly_price: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )  # 月价（整数）
+    currency: Mapped[str] = mapped_column(
+        String(3),
+        nullable=False,
+        default="CNY",
+    )  # ISO 4217 货币代码（默认 CNY）
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )  # 是否启用（下架但保留历史用）
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=format_timezone,
+    )  # 创建时间（Asia/Shanghai）
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=format_timezone,
+    )  # 更新时间（更新时自动刷新）
 
 
-class PaymentType(str, enum.Enum):
-    """支付类型枚举"""
+class Order(Base):
+    """
+    表：orders
+    用途：业务订单（连接前端与支付中台）
+    """
 
-    credit_recharge = "credit_recharge"  # 积分充值
-    subscription = "subscription"  # 订阅支付
+    __tablename__ = "orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_no: Mapped[str] = mapped_column(
+        String(36), unique=True, index=True, default=lambda: str(uuid.uuid4())
+    )  # 对外唯一标识（业务订单号）
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )  # 用户ID
+
+    # 订单基本信息
+    order_type: Mapped[OrderType] = mapped_column(
+        Enum(OrderType, name="order_type"), index=True
+    )  # 订单类型
+    product_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("subscription_plans.id"),
+        nullable=True,
+        index=True,
+    )  # 商品ID（外键：subscription_plans.id；积分充值订单为空，真实商品编码见 extra_metadata）
+    quantity: Mapped[int] = mapped_column(Integer, default=1)  # 数量
+    amount: Mapped[float] = mapped_column(Float)  # 应付金额
+    currency: Mapped[str] = mapped_column(String(3), default="USD")  # 货币类型
+
+    # 订单状态
+    status: Mapped[OrderStatus] = mapped_column(
+        Enum(OrderStatus, name="order_status"),
+        default=OrderStatus.pending,
+        index=True,
+    )  # 订单状态
+
+    # 业务相关字段
+    payment_id: Mapped[str | None] = mapped_column(
+        String(100), index=True, nullable=True
+    )  # 支付网关订单号
+    payment_method: Mapped[PaymentProvider | None] = mapped_column(
+        Enum(PaymentProvider, name="payment_provider"),
+        nullable=True,
+    )  # 支付渠道
+    return_url: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )  # 支付完成跳转URL
+    extra_metadata: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True
+    )  # 额外的元数据
+
+    # 时间戳
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=format_timezone
+    )  # 创建时间
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=format_timezone, onupdate=format_timezone
+    )  # 更新时间
+    paid_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )  # 支付时间
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )  # 订单过期时间
+
+    # 关联关系
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+    subscription_plan_config: Mapped["SubscriptionPlanConfig | None"] = relationship(
+        "SubscriptionPlanConfig",
+        foreign_keys=[product_id],
+    )
+
+
+# ============================================================================
 
 
 class StripePayment(Base):
@@ -429,15 +557,17 @@ class StripePayment(Base):
     credits_amount: Mapped[int | None] = mapped_column(
         Integer, nullable=True
     )  # 充值的积分数量（仅用于积分充值）
-    subscription_plan: Mapped[SubscriptionPlan | None] = mapped_column(
-        Enum(SubscriptionPlan, name="subscription_plan"), nullable=True
-    )  # 订阅计划（仅用于订阅支付）
+    subscription_plan: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )  # 订阅计划代码（仅用于订阅支付，存储 plan_code）
     subscription_months: Mapped[int | None] = mapped_column(
         Integer, nullable=True
     )  # 订阅月数（仅用于订阅支付）
 
     # 元数据
-    extra_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)  # 额外的元数据
+    extra_metadata: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True
+    )  # 额外的元数据
     error_message: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )  # 错误信息（支付失败时）
@@ -454,7 +584,9 @@ class StripePayment(Base):
     )  # 完成时间（支付成功或失败时）
 
     # 关联关系
-    user: Mapped["User"] = relationship("User", foreign_keys=[user_id], overlaps="payments")
+    user: Mapped["User"] = relationship(
+        "User", foreign_keys=[user_id], overlaps="payments"
+    )
 
 
 class StripeWebhookEvent(Base):
@@ -471,7 +603,9 @@ class StripeWebhookEvent(Base):
     )  # Stripe Event ID
     event_type: Mapped[str] = mapped_column(String(100), index=True)  # 事件类型
     payload: Mapped[dict] = mapped_column(JSONB)  # 完整的事件数据
-    processed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)  # 是否已处理
+    processed: Mapped[bool] = mapped_column(
+        Boolean, default=False, index=True
+    )  # 是否已处理
     processed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )  # 处理时间
@@ -481,3 +615,6 @@ class StripeWebhookEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=format_timezone
     )  # 创建时间
+
+
+# ============================================================================

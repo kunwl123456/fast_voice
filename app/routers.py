@@ -23,8 +23,8 @@ credits_router = APIRouter(prefix="/console/credits", tags=["积分管理"])
 # 订阅管理
 subscription_router = APIRouter(prefix="/console/subscription", tags=["订阅管理"])
 
-# 支付管理
-payment_router = APIRouter(prefix="/console/payments", tags=["支付管理"])
+# 订单管理
+orders_router = APIRouter(prefix="/console/orders", tags=["订单管理"])
 
 # 音色克隆 - Console
 clone_console_router = APIRouter(prefix="/console/clone", tags=["音色克隆"])
@@ -70,6 +70,11 @@ docs_router = APIRouter(prefix="/docs", tags=["文档"])
 webhook_router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 
 
+# ============= 回调路由 =============
+# 支付中台回调（内部接口，不需要用户认证）
+callback_router = APIRouter(prefix="/callback", tags=["回调接口"])
+
+
 # ============= 导出所有路由器 =============
 __all__ = [
     # Console 路由
@@ -79,6 +84,7 @@ __all__ = [
     "credits_router",
     "subscription_router",
     "payment_router",
+    "orders_router",
     "clone_console_router",
     "tts_console_router",
     "voices_console_router",
@@ -91,6 +97,8 @@ __all__ = [
     "admin_invite_codes_router",
     # Webhook 路由
     "webhook_router",
+    # 回调路由
+    "callback_router",
     # 文档路由
     "docs_router",
 ]

@@ -5,80 +5,76 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from loguru import logger
 from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.tools.common import tz_now
+from app.core.schemas import CreateOrderIn
 from app.core.error_codes import SubscriptionError
+from app.api.controller.orders import create_order
 from app.core.exceptions import BadRequestException
 from app.api.services.quota_limiter import QuotaLimiter
 from app.api.services.billing import get_or_create_account
 from app.api.services.clone_limit_checker import get_clone_usage
-from app.core.models import CreditAccount, CreditTransaction, TxType, User
+from app.api.services.plan_config import query_plan_config, get_plan_config_by_id
+from app.core.models import (
+    User,
+    Order,
+    CreditAccount,
+    CreditTransaction,
+    SubscriptionPlanConfig,
+)
 from app.core.schemas import (
+    CreateOrderOut,
     SubscriptionInfo,
-    UpgradeSubscriptionOut,
-    format_datetime,
     PlanConfigOut,
 )
 from app.core.constants import (
-    PlanConfig,
-    SUBSCRIPTION_PLANS,
-    SubscriptionPlanType,
+    TxType,
+    Currency,
+    OrderType,
+    PaymentProvider,
+    CAN_UPGRADE_PLANS,
     SUBSCRIPTION_MIN_MONTHS,
     SUBSCRIPTION_MAX_MONTHS,
     SUBSCRIPTION_DAYS_PER_MONTH,
+    OrderStatus,
 )
 
 
-def has_api_access(plan: str) -> bool:
-    """
-    检查订阅计划是否有API访问权限
-
-    Args:
-        plan: 订阅计划代码
-
-    Returns:
-        bool: 是否有API访问权限
-    """
-    config = get_plan_config(plan)
-    return config.api_access
-
-
-def get_plan_config(plan: str) -> PlanConfig:
-    """
-    获取计划配置
-
-    Args:
-        plan: 订阅计划代码 (free/pro/enterprise)
-
-    Returns:
-        PlanConfig: 计划配置对象，如果计划不存在则返回免费版配置
-    """
-    return SUBSCRIPTION_PLANS.get(plan, SUBSCRIPTION_PLANS["free"])
-
-
-def get_all_plan_configs() -> list[PlanConfigOut]:
+async def get_all_plan_configs(db: AsyncSession) -> list[PlanConfigOut]:
     """
     获取所有订阅计划的配置信息
+
+    Args:
+        db: 数据库会话
 
     Returns:
         list[PlanConfigOut]: 所有订阅计划配置列表
     """
-    result = []
-    for plan_code, config in SUBSCRIPTION_PLANS.items():
-        result.append(
-            PlanConfigOut(
-                plan=plan_code,
-                name=config.name,
-                monthly_credits=config.monthly_credits,
-                monthly_quota=config.monthly_quota,
-                clone_limit=config.clone_limit,
-                api_access=config.api_access,
-                commercial_use=config.commercial_use,
-                priority_support=config.priority_support,
-            )
+    result = await db.execute(
+        select(SubscriptionPlanConfig).where(SubscriptionPlanConfig.is_active == True)
+    )
+    plans = result.scalars().all()
+
+    # 将 SQLAlchemy 模型转换为 Pydantic 模型
+    return [
+        PlanConfigOut(
+            id=plan.id,
+            plan=plan.plan_code,
+            name=plan.name,
+            monthly_credits=plan.monthly_credits,
+            monthly_quota=plan.monthly_quota,
+            clone_limit=plan.clone_limit,
+            api_access=plan.api_access,
+            commercial_use=plan.commercial_use,
+            priority_support=plan.priority_support,
+            monthly_price=plan.monthly_price,
+            currency=plan.currency,
         )
-    return result
+        for plan in plans
+    ]
 
 
 async def get_monthly_credits_used(db: AsyncSession, user_id: int) -> int:
@@ -123,7 +119,7 @@ async def get_user_subscription(user: User, db: AsyncSession) -> SubscriptionInf
     ### 返回
     - 订阅信息对象
     """
-    plan_config = get_plan_config(user.subscription_plan.value)
+    plan_config = await get_plan_config_by_id(db, user.subscription_plan_id)
 
     # 判断订阅状态
     status = "active"
@@ -139,7 +135,7 @@ async def get_user_subscription(user: User, db: AsyncSession) -> SubscriptionInf
     credits_used_this_month = await get_monthly_credits_used(db, user.id)
 
     # 获取配额和克隆使用情况
-    quota_usage, quota_total = await QuotaLimiter.get_usage(user)
+    quota_usage, quota_total = await QuotaLimiter.get_usage(user, db)
     clone_usage, clone_total = await get_clone_usage(db, user)
 
     # 计算可用量
@@ -147,7 +143,7 @@ async def get_user_subscription(user: User, db: AsyncSession) -> SubscriptionInf
     clone_available = clone_total - clone_usage
 
     return SubscriptionInfo(
-        plan=user.subscription_plan.value,
+        plan=plan_config.plan_code,
         plan_name=plan_config.name,
         status=status,
         ends_at=user.subscription_ends_at,
@@ -169,8 +165,12 @@ async def get_user_subscription(user: User, db: AsyncSession) -> SubscriptionInf
 
 
 async def upgrade_user_subscription(
-    db: AsyncSession, user: User, plan: str, months: int
-) -> UpgradeSubscriptionOut:
+    db: AsyncSession,
+    user: User,
+    plan: str,
+    months: int,
+    pay_type: str,
+) -> CreateOrderOut:
     """
     升级用户的订阅计划
 
@@ -184,10 +184,17 @@ async def upgrade_user_subscription(
     - 升级结果（包含计划、到期时间、赠送积分）
     """
     # 校验计划类型
-    if plan not in SubscriptionPlanType.can_upgrade_plans():
+    if plan not in CAN_UPGRADE_PLANS:
         raise BadRequestException(
             error=SubscriptionError.INVALID_PLAN,
-            data={"valid_plans": SubscriptionPlanType.can_upgrade_plans()},
+            data={"valid_plans": CAN_UPGRADE_PLANS},
+        )
+
+    all_pay_types = list(PaymentProvider.__members__.keys())
+    if pay_type not in all_pay_types:
+        raise BadRequestException(
+            error=SubscriptionError.INVALID_PAY_TYPE,
+            data={"valid_pay_types": all_pay_types},
         )
 
     # 校验订阅月数范围
@@ -201,37 +208,122 @@ async def upgrade_user_subscription(
             },
         )
 
-    # 计算订阅到期时间
-    now = datetime.now(ZoneInfo("Asia/Shanghai"))
-    ends_at = now + timedelta(days=SUBSCRIPTION_DAYS_PER_MONTH * months)
+    # 获取订阅计划配置
+    plan_config = await query_plan_config(db, plan)
+    if not plan_config:
+        raise BadRequestException(
+            error=SubscriptionError.INVALID_PLAN,
+            message="订阅计划配置不存在",
+        )
 
-    # 更新用户订阅（直接赋值字符串，避免枚举转换的同步操作）
-    user.subscription_plan = plan  # type: ignore
-    user.subscription_ends_at = ends_at
-    db.add(user)
-    await db.flush()
-
-    # 赠送对应的月度积分
-    plan_config = get_plan_config(plan)
-    acc = await get_or_create_account(db, user.id)
-    credits_added = plan_config.monthly_credits * months
-    acc.balance += credits_added
-    db.add(acc)
-    await db.flush()
-
-    # 记录积分流水
-    tx = CreditTransaction(
-        account_id=acc.id,
-        tx_type=TxType.subscription,
-        amount=credits_added,
-        ref_type="subscription",
-        ref_id=f"{plan}_{months}m",
-        note=f"订阅{plan_config.name}{months}个月赠送积分",
+    extra_metadata = {
+        "months": months,
+        "plan_name": plan_config.name,
+        "plan_code": plan_config.plan_code,
+        "monthly_price": plan_config.monthly_price,
+        "plan_currency": plan_config.currency,
+    }
+    return await create_order(
+        db,
+        user,
+        CreateOrderIn(
+            order_type=OrderType.subscription.value,
+            product_id=plan_config.id,
+            product_name=plan_config.name,
+            quantity=months,
+            payment_method=PaymentProvider(pay_type),
+            currency=Currency(plan_config.currency),
+            unit_price=plan_config.monthly_price,
+            extra_metadata=extra_metadata,
+        ),
     )
-    db.add(tx)
 
-    return UpgradeSubscriptionOut(
-        plan=plan,
-        ends_at=format_datetime(ends_at),
-        credits_added=credits_added,
+
+async def handle_subscription_callback(db: AsyncSession, payload: dict) -> bool:
+
+    order_no = payload["merchant_order_no"]
+    payment_status = payload["status"]
+
+    oqs = await db.execute(select(Order).where(Order.order_no == order_no))
+    order: Order = oqs.scalar_one_or_none()
+    if not order:
+        logger.error(f"订单不存在：{order_no=} {payload=}")
+        return False
+    if order.status == OrderStatus.paid:
+        logger.warning(f"订单已处理过：{order_no=}")
+        return True
+    if order.status != OrderStatus.pending:
+        logger.error(f"订单状态异常：{order_no=} status={order.status}")
+        return False
+
+    uqs = await db.execute(select(User).where(User.id == order.user_id))
+    user: User = uqs.scalar_one_or_none()
+    if not user:
+        logger.error(f"用户不存在：user_id={order.user_id} {payload=}")
+        return False
+
+    pqs = await db.execute(
+        select(SubscriptionPlanConfig).where(
+            SubscriptionPlanConfig.id == order.product_id,
+            SubscriptionPlanConfig.is_active.is_(True),
+        )
     )
+    plan_config: SubscriptionPlanConfig = pqs.scalar_one_or_none()
+    if not plan_config:
+        logger.error(f"订阅计划不存在：plan_config_id={order.product_id} {payload=}")
+        return False
+
+    if payment_status != "succeeded":
+        # 更新订单状态
+        order.status = OrderStatus.failed
+        db.add(order)
+        await db.flush()
+        return True
+
+    else:
+        # 更新订单状态
+        order.status = OrderStatus.paid
+        db.add(order)
+        await db.flush()
+
+        # 计算订阅到期时间
+        now = tz_now()
+
+        # 如果用户当前订阅未过期，从原到期时间续期；否则从现在开始
+        if user.subscription_ends_at and user.subscription_ends_at > now:
+            ends_at = user.subscription_ends_at + timedelta(
+                days=SUBSCRIPTION_DAYS_PER_MONTH * order.quantity
+            )
+        else:
+            ends_at = now + timedelta(days=SUBSCRIPTION_DAYS_PER_MONTH * order.quantity)
+
+        # 更新用户订阅
+        user.subscription_plan_id = plan_config.id
+        user.subscription_ends_at = ends_at
+        db.add(user)
+        await db.flush()
+
+        # 增加账户积分
+        acc = await get_or_create_account(db, user.id)
+        credits_added = plan_config.monthly_credits * order.quantity
+        acc.balance += credits_added
+        db.add(acc)
+        await db.flush()
+
+        # 记录积分流水
+        tx = CreditTransaction(
+            account_id=acc.id,
+            tx_type=TxType.subscription,
+            amount=credits_added,
+            ref_type="subscription",
+            ref_id=f"{plan_config.plan_code}_{order.quantity}m",
+            note=f"订阅{plan_config.name}{order.quantity}个月赠送积分",
+        )
+        db.add(tx)
+        return True
+
+    # return UpgradeSubscriptionOut(
+    #     plan=plan,
+    #     ends_at=format_datetime(ends_at),
+    #     credits_added=credits_added,
+    # )

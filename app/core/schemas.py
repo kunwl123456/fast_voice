@@ -3,12 +3,14 @@ from __future__ import annotations
 from typing import Generic, TypeVar
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field, field_serializer
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_serializer
 
 from app.core.constants import (
-    SubscriptionPlanType,
+    CAN_UPGRADE_PLANS,
     SUBSCRIPTION_MIN_MONTHS,
     SUBSCRIPTION_MAX_MONTHS,
+    PaymentProvider,
+    Currency,
 )
 
 # 定义泛型类型变量
@@ -49,10 +51,30 @@ class RegisterIn(BaseModel):
     )
     invite_code: str = Field(description="邀请码（必须）")
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "email": "liuyulin@autogame.ai",
+                "password": "123456",
+                "display_name": "",
+                "invite_code": "autogame-fast-voice",
+            }
+        }
+    )
+
 
 class LoginIn(BaseModel):
     email: EmailStr = Field(description="用户邮箱地址")
     password: str = Field(description="登录密码")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "email": "liuyulin@autogame.ai",
+                "password": "123456",
+            }
+        }
+    )
 
 
 class TokenOut(BaseModel):
@@ -233,6 +255,7 @@ class RechargeIn(BaseModel):
 class PlanConfigOut(BaseModel):
     """订阅计划配置信息"""
 
+    id: int = Field(description="主键ID")
     plan: str = Field(description="订阅计划代码（free/pro/enterprise）")
     name: str = Field(description="计划名称（免费版/专业版/企业版）")
     monthly_credits: int = Field(description="每月赠送积分")
@@ -241,17 +264,33 @@ class PlanConfigOut(BaseModel):
     api_access: bool = Field(description="是否提供API访问")
     commercial_use: bool = Field(description="是否允许商业使用")
     priority_support: bool = Field(description="是否提供优先支持")
+    monthly_price: int = Field(description="月价（整数）")
+    currency: str = Field(description="ISO 4217 货币代码（默认 CNY）")
 
 
 class UpgradeSubscriptionIn(BaseModel):
     """升级订阅"""
 
     plan: str = Field(
-        description=f"目标计划：{' 或 '.join(SubscriptionPlanType.can_upgrade_plans())}",
+        description=f"目标计划：{' 或 '.join(CAN_UPGRADE_PLANS)}",
     )
     months: int = Field(
         default=1,
         description=f"订阅月数（{SUBSCRIPTION_MIN_MONTHS}-{SUBSCRIPTION_MAX_MONTHS}个月）",
+    )
+    pay_type: str | None = Field(
+        default=None,
+        description=f"支付方式：{list(PaymentProvider.__members__.keys())}",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "plan": "pro",
+                "months": 1,
+                "pay_type": "",
+            }
+        }
     )
 
 
@@ -433,6 +472,149 @@ class BatchInviteCodesOut(BaseModel):
         return format_datetime(dt)
 
 
+# ============= 订单相关 =============
+
+
+class CreateOrderIn(BaseModel):
+    """创建订单请求"""
+
+    order_type: str = Field(
+        description="订单类型：credit_recharge（积分充值）或 subscription（订阅购买）"
+    )
+    currency: Currency = Field(description="货币类型")
+    product_id: int = Field(description="商品ID")
+    product_name: str = Field(description="商品名称")
+    unit_price: int = Field(description="单价")
+    quantity: int = Field(
+        default=1,
+        ge=1,
+        le=12,
+        description="数量：订阅=月数（1-12），积分包=份数（通常为1）",
+    )
+    payment_method: PaymentProvider | None = Field(
+        default=None,
+        description="支付方式：stripe 或 wechatpay；不指定则默认 stripe",
+    )
+    extra_metadata: dict | None = Field(None, description="附加元数据")
+
+
+class CreateOrderOut(BaseModel):
+    """创建订单响应"""
+
+    order_id: str = Field(description="业务订单号")
+    order_type: str = Field(description="订单类型")
+    product_id: int = Field(description="商品ID")
+    product_name: str = Field(description="商品名称")
+    quantity: int = Field(description="数量")
+    amount: float = Field(description="应付金额")
+    currency: str = Field(description="货币类型")
+    status: str = Field(description="订单状态")
+
+    # 支付信息
+    payment_id: str | None = Field(description="支付网关订单号")
+    extra: dict | None = Field(description="前端支付时所需的额外字段")
+    expires_at: datetime | str | None = Field(description="订单过期时间")
+
+    @field_serializer("expires_at")
+    def serialize_expires_at(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
+
+
+class OrderDetailOut(BaseModel):
+    """订单详情响应"""
+
+    order_id: str = Field(description="业务订单号")
+    order_type: str = Field(description="订单类型")
+    product_id: str = Field(description="商品ID")
+    product_name: str = Field(description="商品名称")
+    quantity: int = Field(description="数量")
+    amount: float = Field(description="应付金额")
+    currency: str = Field(description="货币类型")
+    status: str = Field(
+        description="订单状态：pending/paid/fulfilled/cancelled/expired/refunded"
+    )
+
+    # 支付信息
+    payment_id: str | None = Field(description="支付网关订单号")
+    payment_method: PaymentProvider | None = Field(description="支付方式")
+
+    # 时间信息
+    created_at: datetime | str = Field(description="创建时间")
+    paid_at: datetime | str | None = Field(description="支付时间")
+    expires_at: datetime | str | None = Field(description="订单过期时间")
+
+    @field_serializer("created_at", "paid_at", "expires_at")
+    def serialize_datetime_fields(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
+
+
+class OrderListOut(BaseModel):
+    """订单列表项"""
+
+    order_id: str = Field(description="业务订单号")
+    order_type: str = Field(description="订单类型")
+    product_name: str = Field(description="商品名称")
+    amount: float = Field(description="应付金额")
+    currency: str = Field(description="货币类型")
+    status: str = Field(description="订单状态")
+    created_at: datetime | str = Field(description="创建时间")
+
+    @field_serializer("created_at")
+    def serialize_created_at(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
+
+
+class PaymentCallbackIn(BaseModel):
+    """支付中台回调请求"""
+
+    order_id: str = Field(description="业务订单号")
+    payment_id: str = Field(description="支付中台订单号")
+    status: str = Field(description="支付状态：succeeded/failed/cancelled")
+    paid_amount: float | None = Field(default=None, description="实际支付金额")
+    paid_at: datetime | str | None = Field(default=None, description="支付时间")
+    error_message: str | None = Field(default=None, description="错误信息（失败时）")
+    signature: str | None = Field(
+        default=None, description="签名（用于验证回调合法性）"
+    )
+
+
+# ============= 退款相关 =============
+
+
+class CreateRefundIn(BaseModel):
+    """创建退款请求"""
+
+    order_id: str = Field(description="业务订单号")
+    refund_amount: int | None = Field(
+        default=None,
+        gt=0,
+        description="退款金额（最小货币单位，如分）。不填则为全额退款",
+    )
+    reason: str | None = Field(default=None, max_length=500, description="退款原因")
+
+
+class RefundOut(BaseModel):
+    """退款响应"""
+
+    refund_id: str = Field(description="退款ID")
+    order_id: str = Field(description="业务订单号")
+    payment_id: str = Field(description="支付网关支付ID")
+    refund_amount: int = Field(description="退款金额（最小货币单位，如分）")
+    reason: str | None = Field(description="退款原因")
+    status: str = Field(
+        description="退款状态：pending/processing/succeeded/failed/cancelled"
+    )
+    provider: str = Field(description="支付渠道")
+    provider_refund_id: str | None = Field(description="支付渠道退款ID")
+    created_at: datetime | str = Field(description="创建时间")
+    updated_at: datetime | str = Field(description="更新时间")
+    refunded_at: datetime | str | None = Field(description="退款完成时间")
+
+    @field_serializer("created_at", "updated_at", "refunded_at")
+    def serialize_datetime_fields(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
+
+
 # ============================================================================
 # Stripe 支付相关 Schemas
 # ============================================================================
@@ -445,11 +627,11 @@ class CreatePaymentIntentIn(BaseModel):
     amount: float = Field(gt=0, description="支付金额")
     currency: str | None = Field(
         default=None,
-        description="货币类型：usd、cny、hkd 等。不指定则根据支付方式自动选择（card默认usd，alipay/wechat_pay默认cny）"
+        description="货币类型：usd、cny、hkd 等。不指定则根据支付方式自动选择（card默认usd，alipay/wechat_pay默认cny）",
     )
-    payment_method: str | None = Field(
-        default=None, 
-        description="指定支付方式：card（信用卡）、alipay（支付宝）、wechat_pay（微信支付），不指定则自动选择"
+    payment_method: PaymentProvider | None = Field(
+        default=None,
+        description="指定支付方式：stripe 或 wechatpay；不指定则默认 stripe",
     )
     credits_amount: int | None = Field(
         default=None, description="充值的积分数量（仅用于积分充值）"

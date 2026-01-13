@@ -55,11 +55,20 @@ class Settings(BaseSettings):
     db_pool_timeout_seconds: int = 30
     db_pool_recycle_seconds: int = 1800
 
-    # Stripe 支付配置
-    stripe_secret_key: str | None = None  # Stripe 密钥（sk_test_... 或 sk_live_...）
-    stripe_publishable_key: str | None = None  # Stripe 公钥（pk_test_... 或 pk_live_...）
-    stripe_webhook_secret: str | None = None  # Stripe Webhook 签名密钥
-    stripe_payment_return_url: str = "https://your-domain.com/payment/return"  # 支付完成后返回的 URL
+    # 支付页面配置
+    payment_success_url: str
+    payment_cancel_url: str
+
+    # 支付中台配置
+    payment_gateway_url: str | None = None  # 支付中台 API 地址
+    payment_gateway_app_id: str | None = None  # 支付中台应用标识
+    payment_gateway_app_secret: str | None = None  # 支付中台应用密钥
+    payment_callback_url: str | None = (
+        None  # 支付完成回调地址（支付中台调用此地址通知结果）
+    )
+    payment_callback_secret: str | None = (
+        None  # 支付中台回调签名密钥（用于验证回调合法性）
+    )
 
 
 settings = Settings()

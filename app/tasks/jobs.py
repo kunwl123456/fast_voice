@@ -13,8 +13,9 @@ from app.core.db_sync import SessionLocalSync
 from app.api.services.billing import refund
 from app.api.services.storage import job_dir
 from app.tasks.celery_app import celery_app
+from app.core.constants import JobStatus
 from app.api.services.redis_pubsub_sync import RedisPubSubSync
-from app.core.models import CloneJob, JobStatus, TTSJob, Voice, format_timezone
+from app.core.models import CloneJob, TTSJob, Voice, format_timezone
 
 logger = get_task_logger(__name__)
 

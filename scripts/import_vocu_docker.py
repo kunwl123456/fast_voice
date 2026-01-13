@@ -18,8 +18,9 @@ sys.path.insert(0, "/app")
 # 数据库连接会自动从 docker-compose.yml 中的环境变量读取
 
 from sqlalchemy import select
+from app.core.constants import JobStatus
 from app.core.db import AsyncSessionLocal
-from app.core.models import User, Voice, CloneJob, JobStatus
+from app.core.models import User, Voice, CloneJob
 
 # 配置
 ADMIN_EMAIL = "admin@autogame.ai"

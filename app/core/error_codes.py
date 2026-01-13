@@ -15,6 +15,9 @@
     07 - 订阅 (subscription)
     08 - 邀请码 (invite_codes)
     09 - 数据分析 (analytics)
+    10 - 订单 (orders)
+    11 - 支付 (payment)
+    12 - 退款 (refund)
 """
 
 from dataclasses import dataclass
@@ -47,6 +50,9 @@ class Module:
     SUBSCRIPTION = "07"  # 订阅
     INVITE_CODE = "08"  # 邀请码
     ANALYTICS = "09"  # 数据分析
+    ORDER = "10"  # 订单
+    PAYMENT = "11"  # 支付
+    REFUND = "12"  # 退款
 
 
 # ============================================================================
@@ -351,6 +357,9 @@ class SubscriptionError:
     FEATURE_NOT_IN_PLAN = _make_code(
         HTTP_400_BAD_REQUEST, Module.SUBSCRIPTION, 5, "当前订阅计划不支持此功能"
     )
+    INVALID_PAY_TYPE = _make_code(
+        HTTP_400_BAD_REQUEST, Module.SUBSCRIPTION, 6, "无效的支付类型"
+    )
 
     # 402 Payment Required
     PAYMENT_REQUIRED = _make_code(
@@ -411,6 +420,147 @@ class AnalyticsError:
 
 
 # ============================================================================
+# 订单错误码 (模块 10)
+# ============================================================================
+
+
+class OrderError:
+    """订单相关错误"""
+
+    # 400 Bad Request
+    INVALID_ORDER_TYPE = _make_code(
+        HTTP_400_BAD_REQUEST, Module.ORDER, 1, "无效的订单类型"
+    )
+    INVALID_CURRENCY = _make_code(
+        HTTP_400_BAD_REQUEST, Module.ORDER, 4, "无效的货币类型"
+    )
+    INVALID_PAYMENT_METHOD = _make_code(
+        HTTP_400_BAD_REQUEST, Module.ORDER, 5, "无效的支付方式"
+    )
+
+    FAILED_BY_CREATE_PAYMENT = _make_code(
+        HTTP_400_BAD_REQUEST, Module.PAYMENT, 4, "创建支付失败"
+    )
+
+    INVALID_AMOUNT = _make_code(
+        HTTP_400_BAD_REQUEST, Module.PAYMENT, 1, "无效的支付金额"
+    )
+    INVALID_PAYMENT_PROVIDER = _make_code(
+        HTTP_400_BAD_REQUEST, Module.PAYMENT, 2, "无效的支付渠道"
+    )
+    PAYMENT_GATEWAY_CONFIG_ERROR = _make_code(
+        HTTP_400_BAD_REQUEST, Module.PAYMENT, 3, "支付网关配置错误"
+    )
+
+    CANNOT_CANCEL_ORDER = _make_code(
+        HTTP_400_BAD_REQUEST, Module.ORDER, 9, "无法取消订单"
+    )
+
+    # 404 Not Found
+    ORDER_NOT_FOUND = _make_code(HTTP_404_NOT_FOUND, Module.ORDER, 1, "订单不存在")
+
+    # 409 Conflict
+    ORDER_ALREADY_PAID = _make_code(HTTP_409_CONFLICT, Module.ORDER, 1, "订单已支付")
+    ORDER_ALREADY_CANCELLED = _make_code(
+        HTTP_409_CONFLICT, Module.ORDER, 2, "订单已取消"
+    )
+    ORDER_EXPIRED = _make_code(HTTP_409_CONFLICT, Module.ORDER, 3, "订单已过期")
+
+
+# ============================================================================
+# 支付错误码 (模块 11)
+# ============================================================================
+
+
+class PaymentError:
+    """支付相关错误"""
+
+    # 400 Bad Request
+    INVALID_AMOUNT = _make_code(
+        HTTP_400_BAD_REQUEST, Module.PAYMENT, 1, "无效的支付金额"
+    )
+    INVALID_PAYMENT_PROVIDER = _make_code(
+        HTTP_400_BAD_REQUEST, Module.PAYMENT, 2, "无效的支付渠道"
+    )
+    PAYMENT_GATEWAY_CONFIG_ERROR = _make_code(
+        HTTP_400_BAD_REQUEST, Module.PAYMENT, 3, "支付网关配置错误"
+    )
+    CREATE_PAYMENT_FAILED = _make_code(
+        HTTP_400_BAD_REQUEST, Module.PAYMENT, 4, "创建支付失败"
+    )
+
+    # 402 Payment Required
+    PAYMENT_REQUIRED = _make_code(
+        HTTP_402_PAYMENT_REQUIRED, Module.PAYMENT, 1, "需要支付"
+    )
+    PAYMENT_FAILED = _make_code(
+        HTTP_402_PAYMENT_REQUIRED, Module.PAYMENT, 2, "支付失败"
+    )
+    PAYMENT_CANCELLED = _make_code(
+        HTTP_402_PAYMENT_REQUIRED, Module.PAYMENT, 3, "支付已取消"
+    )
+
+    # 404 Not Found
+    PAYMENT_NOT_FOUND = _make_code(
+        HTTP_404_NOT_FOUND, Module.PAYMENT, 1, "支付记录不存在"
+    )
+
+    # 409 Conflict
+    PAYMENT_ALREADY_PROCESSED = _make_code(
+        HTTP_409_CONFLICT, Module.PAYMENT, 1, "支付已处理"
+    )
+
+    # 500 Internal Server Error
+    PAYMENT_GATEWAY_ERROR = _make_code(
+        HTTP_500_INTERNAL_SERVER_ERROR, Module.PAYMENT, 1, "支付网关错误"
+    )
+
+
+# ============================================================================
+# 退款错误码 (模块 12)
+# ============================================================================
+
+
+class RefundError:
+    """退款相关错误"""
+
+    # 400 Bad Request
+    INVALID_REFUND_AMOUNT = _make_code(
+        HTTP_400_BAD_REQUEST, Module.REFUND, 1, "无效的退款金额"
+    )
+    REFUND_AMOUNT_EXCEEDS_PAYMENT = _make_code(
+        HTTP_400_BAD_REQUEST, Module.REFUND, 2, "退款金额超过支付金额"
+    )
+    CANNOT_REFUND_ORDER = _make_code(
+        HTTP_400_BAD_REQUEST, Module.REFUND, 3, "订单无法退款"
+    )
+    CREATE_REFUND_FAILED = _make_code(
+        HTTP_400_BAD_REQUEST, Module.REFUND, 4, "创建退款失败"
+    )
+    NO_PAYMENT_RECORD = _make_code(
+        HTTP_400_BAD_REQUEST, Module.REFUND, 5, "订单没有关联的支付记录"
+    )
+
+    # 404 Not Found
+    REFUND_NOT_FOUND = _make_code(
+        HTTP_404_NOT_FOUND, Module.REFUND, 1, "退款记录不存在"
+    )
+
+    # 409 Conflict
+    REFUND_ALREADY_PROCESSED = _make_code(
+        HTTP_409_CONFLICT, Module.REFUND, 1, "退款已处理"
+    )
+    ORDER_ALREADY_REFUNDED = _make_code(
+        HTTP_409_CONFLICT, Module.REFUND, 2, "订单已退款"
+    )
+
+    # 500 Internal Server Error
+    REFUND_GATEWAY_ERROR = _make_code(
+        HTTP_500_INTERNAL_SERVER_ERROR, Module.REFUND, 1, "退款网关错误"
+    )
+
+
+# ============================================================================
 # 错误码快速索引（用于通过 code 查找错误码定义）
 # ============================================================================
 
@@ -427,6 +577,9 @@ _ERROR_CLASSES = [
     ("订阅", "SUBSCRIPTION", SubscriptionError),
     ("邀请码", "INVITE_CODE", InviteCodeError),
     ("数据分析", "ANALYTICS", AnalyticsError),
+    ("订单", "ORDER", OrderError),
+    ("支付", "PAYMENT", PaymentError),
+    ("退款", "REFUND", RefundError),
 ]
 
 
@@ -581,6 +734,9 @@ __all__ = [
     "SubscriptionError",
     "InviteCodeError",
     "AnalyticsError",
+    "OrderError",
+    "PaymentError",
+    "RefundError",
     # 工具函数
     "get_error_code_by_value",
     "get_all_error_codes",

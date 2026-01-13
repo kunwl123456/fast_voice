@@ -39,7 +39,7 @@ async def list_api_keys(
     按创建时间倒序排列（最新的在前）
     """
     # 检查企业版权限（如无权限会抛出异常）
-    check_enterprise_permission(user)
+    await check_enterprise_permission(db, user)
 
     api_keys_list = await list_user_api_keys(db, user)
     api_keys_data = [k.model_dump() for k in api_keys_list]
@@ -76,7 +76,7 @@ async def create_api_key(
     ```
     """
     # 检查企业版权限（如无权限会抛出异常）
-    check_enterprise_permission(user)
+    await check_enterprise_permission(db, user)
 
     api_key_data = await create_user_api_key(
         db, user, payload.name, payload.expires_days
@@ -151,7 +151,7 @@ async def rotate_api_key(
     - 批量禁用所有旧 Key
     """
     # 检查企业版权限（如无权限会抛出异常）
-    check_enterprise_permission(user)
+    await check_enterprise_permission(db, user)
 
     # 确定 API Key 名称和有效期
     name = "Production Key"

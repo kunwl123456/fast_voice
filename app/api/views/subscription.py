@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import User
 from app.core.responses import success_response
-from app.routers import subscription_router as router
 from app.core.deps import get_db, require_console
+from app.routers import subscription_router as router
 from app.core.schemas import (
     Response,
     SubscriptionInfo,
@@ -45,7 +45,7 @@ async def get_subscription(
     summary="获取所有订阅计划配置",
     response_model=Response[list[PlanConfigOut]],
 )
-async def get_subscription_plans():
+async def get_subscription_plans(db: AsyncSession = Depends(get_db)):
     """
     获取所有订阅计划的配置信息
 
@@ -62,7 +62,7 @@ async def get_subscription_plans():
     - commercial_use: 是否允许商业使用
     - priority_support: 是否提供优先支持
     """
-    plans = get_all_plan_configs()
+    plans = await get_all_plan_configs(db)
     return success_response("获取成功", [plan.model_dump() for plan in plans])
 
 
@@ -93,5 +93,7 @@ async def upgrade_subscription(
     - 升级时立即获得 `monthly_credits × months` 的积分
     - 积分可用于调用 API 服务
     """
-    result = await upgrade_user_subscription(db, user, payload.plan, payload.months)
+    result = await upgrade_user_subscription(
+        db, user, payload.plan, payload.months, payload.pay_type
+    )
     return success_response("订阅升级成功", result.model_dump())
