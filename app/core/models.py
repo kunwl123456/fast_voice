@@ -182,9 +182,6 @@ class Voice(Base):
     """
 
     __tablename__ = "voices"
-    __table_args__ = (
-        UniqueConstraint("owner_user_id", "name", name="uq_voice_owner_name"),
-    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     uuid: Mapped[str] = mapped_column(

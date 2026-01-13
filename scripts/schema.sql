@@ -80,6 +80,7 @@ CREATE INDEX idx_credit_transactions_tx_type ON credit_transactions(tx_type);
 
 -- 表：voices
 -- 用途：音色实体（克隆结果）。公开音色即进入"声音大厅"
+-- 注意：允许同一用户创建多个同名音色，通过 uuid 作为唯一标识
 CREATE TABLE voices (
     id SERIAL PRIMARY KEY,
     uuid VARCHAR(36) NOT NULL UNIQUE,
@@ -89,8 +90,7 @@ CREATE TABLE voices (
     is_public BOOLEAN NOT NULL DEFAULT FALSE,
     preview_audio_path VARCHAR(255) NOT NULL DEFAULT '',
     clone_job_uuid VARCHAR(36) NOT NULL DEFAULT '',
-    created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Shanghai'),
-    CONSTRAINT uq_voice_owner_name UNIQUE (owner_user_id, name)
+    created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Shanghai')
 );
 
 -- 创建索引
