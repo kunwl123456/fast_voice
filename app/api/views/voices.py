@@ -10,7 +10,7 @@ from fastapi import Depends, Query, Path, File, UploadFile
 
 from app.core.models import User, Voice
 from app.core.responses import success_response
-from app.core.deps import get_db, require_console
+from app.core.deps import get_db, require_console, require_openapi, OpenAPIPrincipal
 from app.api.services.storage import (
     to_public_file_url,
     data_dir,
@@ -492,3 +492,122 @@ async def unlike_voice(
 
     voice_data = _voice_out(v)
     return success_response("取消点赞成功", voice_data.model_dump())
+
+
+def _delete_voice_files(v: Voice) -> None:
+    """
+    删除音色相关的文件（预览音频和头像）
+    
+    ### 参数
+    - v: Voice 对象
+    """
+    # 删除预览音频文件（如果存在）
+    if v.preview_audio_path and os.path.exists(v.preview_audio_path):
+        try:
+            os.remove(v.preview_audio_path)
+        except Exception as e:
+            logger.warning(f"删除预览音频文件失败: {v.preview_audio_path}, 错误: {e}")
+
+    # 删除头像文件（如果存在）
+    # 头像文件路径格式：data/voice_avatars/{voice_uuid}.{ext}
+    if v.avatar_url:
+        try:
+            # 从公开URL提取本地路径
+            # avatar_url 格式: /files/voice_avatars/{voice_uuid}.{ext}
+            if v.avatar_url.startswith("/files/"):
+                relative_path = v.avatar_url[len("/files/") :]
+                avatar_path = os.path.join(data_dir(), relative_path)
+                if os.path.exists(avatar_path):
+                    os.remove(avatar_path)
+        except Exception as e:
+            logger.warning(f"删除头像文件失败: {v.avatar_url}, 错误: {e}")
+
+
+@console_router.delete(
+    "/{voice_uuid}", summary="删除音色", response_model=Response[dict]
+)
+async def console_delete_voice(
+    voice_uuid: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console),
+):
+    """
+    删除音色数据（Console 版本）
+
+    ### 功能说明
+    - 删除指定的音色及其相关文件
+    - 只有音色拥有者可以删除
+    - 会删除预览音频文件和头像文件（如果存在）
+
+    ### 权限要求
+    - 需要 Console 认证（Bearer Token）
+    - 只有音色拥有者可以删除
+    """
+    # 查找音色
+    v = (
+        await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
+    ).scalar_one_or_none()
+    if not v:
+        raise NotFoundException(
+            error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
+        )
+
+    # 权限检查：只有音色拥有者可以删除
+    if v.owner_user_id != user.id:
+        raise PermissionException(
+            message="无权删除该音色", error=VoiceError.VOICE_NOT_FOUND
+        )
+
+    # 删除相关文件
+    _delete_voice_files(v)
+
+    # 删除数据库记录
+    await db.delete(v)
+    await db.commit()
+
+    return success_response("删除成功", {"voice_uuid": voice_uuid})
+
+
+@openapi_router.delete(
+    "/{voice_uuid}", summary="删除音色", response_model=Response[dict]
+)
+async def openapi_delete_voice(
+    voice_uuid: str,
+    db: AsyncSession = Depends(get_db),
+    principal: OpenAPIPrincipal = Depends(require_openapi),
+):
+    """
+    删除音色数据（OpenAPI 版本）
+
+    ### 功能说明
+    - 删除指定的音色及其相关文件
+    - 只有音色拥有者可以删除
+    - 会删除预览音频文件和头像文件（如果存在）
+
+    ### 权限要求
+    - 需要 OpenAPI 认证（API Key）
+    - 只有音色拥有者可以删除
+    """
+    # 查找音色
+    v = (
+        await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
+    ).scalar_one_or_none()
+    if not v:
+        raise NotFoundException(
+            error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
+        )
+
+    # 权限检查：只有音色拥有者可以删除
+    if v.owner_user_id != principal.user.id:
+        raise PermissionException(
+            message="无权删除该音色", error=VoiceError.VOICE_NOT_FOUND
+        )
+
+    # 删除相关文件
+    _delete_voice_files(v)
+
+    # 删除数据库记录
+    await db.delete(v)
+    await db.commit()
+
+    return success_response("删除成功", {"voice_uuid": voice_uuid})
