@@ -318,6 +318,12 @@ class CreditError:
     INVALID_CREDIT_AMOUNT = _make_code(
         HTTP_400_BAD_REQUEST, Module.CREDIT, 1, "积分数量无效"
     )
+    INVALID_QUANTITY = _make_code(
+        HTTP_400_BAD_REQUEST, Module.CREDIT, 2, "购买份数无效"
+    )
+    INVALID_PAY_TYPE = _make_code(
+        HTTP_400_BAD_REQUEST, Module.CREDIT, 3, "无效的支付方式"
+    )
 
     # 402 Payment Required
     INSUFFICIENT_BALANCE = _make_code(
@@ -330,6 +336,9 @@ class CreditError:
     )
     TRANSACTION_NOT_FOUND = _make_code(
         HTTP_404_NOT_FOUND, Module.CREDIT, 2, "交易记录不存在"
+    )
+    CREDIT_PACKAGE_NOT_FOUND = _make_code(
+        HTTP_404_NOT_FOUND, Module.CREDIT, 3, "积分档位不存在或已下架"
     )
 
 

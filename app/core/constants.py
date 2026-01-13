@@ -32,6 +32,7 @@ class OrderStatus(str, Enum):
 
     pending = "pending"  # 待支付
     paid = "paid"  # 已支付
+    fulfilled = "fulfilled"  # 已完成（业务处理完成）
     failed = "failed"  # 失败
     cancelled = "cancelled"  # 已取消
     expired = "expired"  # 已过期
@@ -43,24 +44,6 @@ class OrderType(str, Enum):
 
     credit_recharge = "credit_recharge"  # 积分充值
     subscription = "subscription"  # 订阅购买
-
-
-class PaymentType(str, Enum):
-    """支付类型枚举"""
-
-    credit_recharge = "credit_recharge"  # 积分充值
-    subscription = "subscription"  # 订阅支付
-
-
-class PaymentStatus(str, Enum):
-    """支付状态枚举"""
-
-    pending = "pending"  # 待支付
-    processing = "processing"  # 处理中
-    succeeded = "succeeded"  # 支付成功
-    failed = "failed"  # 支付失败
-    canceled = "canceled"  # 已取消
-    refunded = "refunded"  # 已退款
 
 
 class PaymentProvider(str, Enum):

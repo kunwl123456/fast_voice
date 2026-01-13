@@ -24,8 +24,6 @@ from app.core.constants import (
     JobStatus,
     TxType,
     OrderType,
-    PaymentType,
-    PaymentStatus,
     PaymentProvider,
     OrderStatus,
 )
@@ -76,9 +74,6 @@ class User(Base):
     voices: Mapped[list["Voice"]] = relationship(back_populates="owner")
     tts_jobs: Mapped[list["TTSJob"]] = relationship(back_populates="user")
     clone_jobs: Mapped[list["CloneJob"]] = relationship(back_populates="user")
-    payments: Mapped[list["StripePayment"]] = relationship(
-        "StripePayment", foreign_keys="StripePayment.user_id"
-    )
 
 
 class ApiKey(Base):
@@ -439,6 +434,35 @@ class SubscriptionPlanConfig(Base):
     )  # 更新时间（更新时自动刷新）
 
 
+class CreditPackage(Base):
+    """
+    表：credit_packages
+    用途：积分充值档位（展示/下单/履约的唯一可信来源）
+    """
+
+    __tablename__ = "credit_packages"
+    __table_args__ = (UniqueConstraint("code", name="uq_credit_packages_code"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    credits: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="CNY")
+    price: Mapped[int] = mapped_column(Integer, nullable=False)  # 最小货币单位（分）
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=format_timezone,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=format_timezone,
+        onupdate=format_timezone,
+    )
+
+
 class Order(Base):
     """
     表：orders
@@ -511,110 +535,3 @@ class Order(Base):
         "SubscriptionPlanConfig",
         foreign_keys=[product_id],
     )
-
-
-# ============================================================================
-
-
-class StripePayment(Base):
-    """
-    表：stripe_payments
-    用途：记录 Stripe 支付订单和状态
-    """
-
-    __tablename__ = "stripe_payments"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    uuid: Mapped[str] = mapped_column(
-        String(36), unique=True, index=True, default=lambda: str(uuid.uuid4())
-    )  # 对外唯一标识
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True
-    )  # 用户ID
-    payment_type: Mapped[PaymentType] = mapped_column(
-        Enum(PaymentType, name="payment_type"), index=True
-    )  # 支付类型
-    amount: Mapped[float] = mapped_column(Float)  # 支付金额（美元）
-    currency: Mapped[str] = mapped_column(String(3), default="usd")  # 货币类型
-    status: Mapped[PaymentStatus] = mapped_column(
-        Enum(PaymentStatus, name="payment_status"),
-        default=PaymentStatus.pending,
-        index=True,
-    )  # 支付状态
-
-    # Stripe 相关字段
-    stripe_payment_intent_id: Mapped[str | None] = mapped_column(
-        String(255), unique=True, index=True, nullable=True
-    )  # Stripe PaymentIntent ID
-    stripe_customer_id: Mapped[str | None] = mapped_column(
-        String(255), index=True, nullable=True
-    )  # Stripe Customer ID
-    client_secret: Mapped[str | None] = mapped_column(
-        String(512), nullable=True
-    )  # 客户端密钥（用于前端确认支付）
-
-    # 业务相关字段
-    credits_amount: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )  # 充值的积分数量（仅用于积分充值）
-    subscription_plan: Mapped[str | None] = mapped_column(
-        String(32), nullable=True
-    )  # 订阅计划代码（仅用于订阅支付，存储 plan_code）
-    subscription_months: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )  # 订阅月数（仅用于订阅支付）
-
-    # 元数据
-    extra_metadata: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True
-    )  # 额外的元数据
-    error_message: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )  # 错误信息（支付失败时）
-
-    # 时间戳
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=format_timezone
-    )  # 创建时间
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=format_timezone, onupdate=format_timezone
-    )  # 更新时间
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )  # 完成时间（支付成功或失败时）
-
-    # 关联关系
-    user: Mapped["User"] = relationship(
-        "User", foreign_keys=[user_id], overlaps="payments"
-    )
-
-
-class StripeWebhookEvent(Base):
-    """
-    表：stripe_webhook_events
-    用途：记录 Stripe Webhook 事件，防止重复处理
-    """
-
-    __tablename__ = "stripe_webhook_events"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    event_id: Mapped[str] = mapped_column(
-        String(255), unique=True, index=True
-    )  # Stripe Event ID
-    event_type: Mapped[str] = mapped_column(String(100), index=True)  # 事件类型
-    payload: Mapped[dict] = mapped_column(JSONB)  # 完整的事件数据
-    processed: Mapped[bool] = mapped_column(
-        Boolean, default=False, index=True
-    )  # 是否已处理
-    processed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )  # 处理时间
-    error_message: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )  # 处理错误信息
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=format_timezone
-    )  # 创建时间
-
-
-# ============================================================================

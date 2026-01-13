@@ -246,6 +246,45 @@ class CreditTxOut(BaseModel):
         return format_datetime(dt)
 
 
+class CreditPackageOut(BaseModel):
+    """积分充值档位"""
+
+    code: str = Field(description="档位编码（如 credit_1000）")
+    name: str = Field(description="展示名")
+    credits: int = Field(description="充值积分数")
+    currency: str = Field(description="货币（ISO 4217）")
+    price: int = Field(description="支付金额（最小货币单位，如分）")
+    is_active: bool = Field(description="是否上架")
+
+
+class BuyCreditIn(BaseModel):
+    """购买积分请求"""
+
+    package_code: str = Field(description="积分档位编码（如 credit_1000）")
+    quantity: int = Field(default=1, ge=1, le=100, description="购买份数（默认1）")
+    pay_type: PaymentProvider | None = Field(
+        default=None,
+        description=f"支付方式：{list(PaymentProvider.__members__.keys())}",
+    )
+
+
+class BuyCreditOut(BaseModel):
+    """购买积分响应"""
+
+    name: str = Field(description="展示名")
+    pay_type: str = Field(description="支付方式")
+    package_code: str = Field(description="积分档位编码")
+    credits: int = Field(description="本次购买到账积分数（已乘 quantity）")
+    currency: str = Field(description="货币（ISO 4217）")
+    price: int = Field(description="本次支付金额（最小货币单位，已乘 quantity）")
+    extra: dict | None = Field(description="前端支付所需字段（由支付网关返回）")
+    expires_at: datetime | str | None = Field(description="订单过期时间")
+
+    @field_serializer("expires_at")
+    def serialize_expires_at(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
+
+
 class RechargeIn(BaseModel):
     user_id: str = Field(description="目标用户的 UUID")
     amount: int = Field(gt=0, description="充值金额（必须为正整数）")

@@ -18,6 +18,7 @@ from app.core.models import (
     InviteCode,
     CreditAccount,
     SubscriptionPlanConfig,
+    CreditPackage,
 )
 
 
@@ -96,6 +97,63 @@ async def init_subscription_plans(db: AsyncSession) -> None:
 
     await db.commit()
     logger.info("订阅计划配置初始化完成")
+
+
+async def init_credit_packages(db: AsyncSession) -> None:
+    """
+    初始化积分充值档位（幂等操作）
+    """
+    packages_data = [
+        {
+            "code": "credit_500",
+            "name": "500 积分",
+            "credits": 500,
+            "currency": "CNY",
+            "price": 5000,  # 50 元
+            "is_active": True,
+        },
+        {
+            "code": "credit_1000",
+            "name": "1,000 积分",
+            "credits": 1000,
+            "currency": "CNY",
+            "price": 9000,  # 90 元
+            "is_active": True,
+        },
+        {
+            "code": "credit_5000",
+            "name": "5,000 积分",
+            "credits": 5000,
+            "currency": "CNY",
+            "price": 40000,  # 400 元
+            "is_active": True,
+        },
+        {
+            "code": "credit_10000",
+            "name": "10,000 积分",
+            "credits": 10000,
+            "currency": "CNY",
+            "price": 70000,  # 700 元
+            "is_active": True,
+        },
+    ]
+
+    for pkg_data in packages_data:
+        result = await db.execute(
+            select(CreditPackage).where(CreditPackage.code == pkg_data["code"])
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            for key, value in pkg_data.items():
+                if key != "code":  # code 不可修改
+                    setattr(existing, key, value)
+            logger.info(f"已更新积分档位: {pkg_data['code']}")
+        else:
+            db.add(CreditPackage(**pkg_data))
+            logger.info(f"已创建积分档位: {pkg_data['code']}")
+
+    await db.commit()
+    logger.info("积分档位初始化完成")
 
 
 async def bootstrap_admin(db: AsyncSession) -> None:

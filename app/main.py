@@ -20,6 +20,7 @@ from app.core.openapi import setup_openapi, OPENAPI_DESCRIPTION
 from app.core.responses import error_response, unauthorized_response, forbidden_response
 from app.api.services.bootstrap import (
     init_subscription_plans,
+    init_credit_packages,
     bootstrap_admin,
     bootstrap_pro,
 )
@@ -260,6 +261,7 @@ async def init_db() -> None:
     # 👤 确保管理员账号存在
     async with AsyncSessionLocal() as db:
         await init_subscription_plans(db)
+        await init_credit_packages(db)
         await bootstrap_admin(db)
         await bootstrap_pro(db)
 

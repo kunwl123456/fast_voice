@@ -386,7 +386,7 @@ class PaymentGatewayClient:
                 return response.json()["data"]
 
         except httpx.HTTPError as e:
-            logger.error(f"[PaymentGateway] HTTP 请求失败: {e}")
+            logger.error(f"[PaymentGateway] HTTP 请求失败: {traceback.format_exc()}")
             raise PaymentGatewayError("HTTP_REQUEST_FAILED", str(e))
 
 

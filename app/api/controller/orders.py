@@ -23,6 +23,7 @@ from app.core.constants import (
 from app.core.models import (
     User,
     Order,
+    CreditPackage,
 )
 from app.core.schemas import (
     CreateOrderIn,
@@ -40,6 +41,7 @@ from app.api.services.payment_gateway_client import (
     get_payment_gateway_client,
     PaymentGatewayError,
 )
+from app.api.services.billing import recharge as recharge_credits
 
 
 def _to_cents(amount: float, currency: str) -> int:
@@ -456,7 +458,9 @@ async def handle_payment_callback(
         更新后的订单
     """
     # 查找订单
-    result = await db.execute(select(Order).where(Order.order_no == order_id))
+    result = await db.execute(
+        select(Order).where(Order.order_no == order_id).with_for_update()
+    )
     order = result.scalar_one_or_none()
 
     if not order:
@@ -531,6 +535,41 @@ async def _fulfill_credit_recharge(db: AsyncSession, order: Order) -> None:
         db: 数据库会话
         order: 订单对象
     """
+    em = order.extra_metadata or {}
+    package_code = em.get("credit_package_code") or em.get("package_code")
+    if not package_code:
+        logger.error(f"积分充值订单缺少档位编码: order_id={order.order_no}")
+        return
+
+    # 查档位（不限制 is_active：历史订单仍需可履约）
+    pkg = (
+        await db.execute(
+            select(CreditPackage).where(CreditPackage.code == package_code)
+        )
+    ).scalar_one_or_none()
+    if not pkg:
+        logger.error(
+            f"积分充值订单档位不存在: order_id={order.order_no}, package_code={package_code}"
+        )
+        return
+
+    quantity = int(order.quantity or 1)
+    credits_to_add = int(pkg.credits) * quantity
+    note = f"购买积分：{pkg.name} x{quantity}"
+
+    # 入账（带行锁，原子增加余额并写流水）
+    await recharge_credits(
+        db=db,
+        user_id=order.user_id,
+        amount=credits_to_add,
+        note=note,
+        ref_id=order.order_no,
+    )
+
+    logger.info(
+        f"积分充值履约完成: order_id={order.order_no}, "
+        f"package={pkg.code}, credits={credits_to_add}"
+    )
 
 
 async def _fulfill_subscription(db: AsyncSession, order: Order) -> None:
