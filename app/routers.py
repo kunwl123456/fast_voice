@@ -53,6 +53,11 @@ admin_credit_router = APIRouter(
     prefix="/admin/credits", tags=["积分管理"], dependencies=[Depends(require_admin)]
 )
 
+# 订单管理 - Admin
+admin_order_router = APIRouter(
+    prefix="/admin/orders", tags=["订单管理"], dependencies=[Depends(require_admin)]
+)
+
 # 邀请码管理 - Admin
 admin_invite_codes_router = APIRouter(
     prefix="/admin/invite-codes",
@@ -94,6 +99,7 @@ __all__ = [
     # Admin 路由
     "admin_credit_router",
     "admin_invite_codes_router",
+    "admin_order_router",
     # Webhook 路由
     "webhook_router",
     # 回调路由

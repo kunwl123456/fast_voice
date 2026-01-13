@@ -44,6 +44,7 @@ from app.routers import (
     webhook_router,
     callback_router,
     docs_router,
+    admin_order_router,
 )
 
 # 注册各个 views 模块的路由处理器
@@ -52,7 +53,7 @@ import app.api.views.api_keys  # noqa: F401
 import app.api.views.analytics  # noqa: F401
 import app.api.views.credits  # noqa: F401
 import app.api.views.subscription  # noqa: F401
-import app.api.views.orders  # noqa: F401
+import app.admin.views.orders  # noqa: F401
 import app.api.views.clone  # noqa: F401
 import app.api.views.tts  # noqa: F401
 import app.api.views.voices  # noqa: F401
@@ -284,6 +285,7 @@ _app.include_router(orders_router)
 _app.include_router(api_keys_router)
 _app.include_router(credits_router)
 _app.include_router(admin_credit_router)
+_app.include_router(admin_order_router)
 _app.include_router(admin_invite_codes_router)
 _app.include_router(analytics_router)
 _app.include_router(voices_console_router)
