@@ -14,10 +14,10 @@ from app.core.exceptions import *
 from app.core.config import settings
 from app.core.error_codes import CommonError
 from app.api.services.storage import ensure_dir
-from app.api.services.bootstrap import bootstrap_admin
 from app.core.db import Base, engine, AsyncSessionLocal
 from app.core.middlewares import OpenAPILoggingMiddleware
 from app.core.openapi import setup_openapi, OPENAPI_DESCRIPTION
+from app.api.services.bootstrap import bootstrap_admin, bootstrap_pro
 from app.core.responses import error_response, unauthorized_response, forbidden_response
 
 # 从统一的路由注册中心导入所有路由
@@ -254,6 +254,7 @@ async def init_db() -> None:
     # 👤 确保管理员账号存在
     async with AsyncSessionLocal() as db:
         await bootstrap_admin(db)
+        await bootstrap_pro(db)
 
 
 def init_files() -> None:
