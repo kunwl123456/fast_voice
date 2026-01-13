@@ -62,7 +62,6 @@ class Settings(BaseSettings):
     # 支付中台配置
     payment_gateway_url: str | None = None  # 支付中台 API 地址
     payment_gateway_app_id: str | None = None  # 支付中台应用标识
-    payment_gateway_app_secret: str | None = None  # 支付中台应用密钥
     payment_callback_url: str | None = (
         None  # 支付完成回调地址（支付中台调用此地址通知结果）
     )

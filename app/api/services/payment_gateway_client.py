@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hmac
 import hashlib
+import traceback
 from uuid import UUID
 from datetime import datetime
 from typing import Any, Literal
@@ -176,7 +177,7 @@ class PaymentGatewayClient:
                 payload=response["payload"],
             )
         except Exception as e:
-            logger.error(f"[PaymentGateway] 创建支付失败: {e}")
+            logger.error(f"[PaymentGateway] 创建支付失败: {traceback.format_exc()}")
             raise PaymentGatewayError("CREATE_PAYMENT_FAILED", str(e))
 
     async def get_payment(self, payment_id: UUID | str) -> PaymentDetailResult:
@@ -214,7 +215,7 @@ class PaymentGatewayClient:
                 ),
             )
         except Exception as e:
-            logger.error(f"[PaymentGateway] 查询支付失败: {e}")
+            logger.error(f"[PaymentGateway] 查询支付失败: {traceback.format_exc()}")
             raise PaymentGatewayError("GET_PAYMENT_FAILED", str(e))
 
     async def create_refund(
@@ -268,7 +269,7 @@ class PaymentGatewayClient:
                 ),
             )
         except Exception as e:
-            logger.error(f"[PaymentGateway] 创建退款失败: {e}")
+            logger.error(f"[PaymentGateway] 创建退款失败: {traceback.format_exc()}")
             raise PaymentGatewayError("CREATE_REFUND_FAILED", str(e))
 
     async def get_refund(self, refund_id: UUID | str) -> RefundResult:
@@ -306,7 +307,7 @@ class PaymentGatewayClient:
                 ),
             )
         except Exception as e:
-            logger.error(f"[PaymentGateway] 查询退款失败: {e}")
+            logger.error(f"[PaymentGateway] 查询退款失败: {traceback.format_exc()}")
             raise PaymentGatewayError("GET_REFUND_FAILED", str(e))
 
     def verify_callback_signature(
@@ -333,8 +334,8 @@ class PaymentGatewayClient:
                 secret.encode("utf-8"), payload_str.encode("utf-8"), hashlib.sha256
             ).hexdigest()
             return hmac.compare_digest(expected_signature, signature)
-        except Exception as e:
-            logger.error(f"[PaymentGateway] 验证签名失败: {e}")
+        except Exception:
+            logger.error(f"[PaymentGateway] 验证签名失败: {traceback.format_exc()}")
             return False
 
     async def _request(self, method: str, path: str, data: dict | None = None) -> dict:
