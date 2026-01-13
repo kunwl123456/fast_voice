@@ -133,28 +133,6 @@ async def import_voices():
 
         print(f"✅ 找到管理员用户: {admin_user.email} (ID: {admin_user.id})\n")
 
-        # 清空现有数据
-        print("🗑️  清空现有语音数据...")
-        result = await session.execute(
-            select(Voice).where(Voice.owner_user_id == admin_user.id)
-        )
-        existing_voices = result.scalars().all()
-        for v in existing_voices:
-            await session.delete(v)
-
-        # 清空现有克隆任务
-        result = await session.execute(
-            select(CloneJob).where(CloneJob.user_id == admin_user.id)
-        )
-        existing_clone_jobs = result.scalars().all()
-        for cj in existing_clone_jobs:
-            await session.delete(cj)
-
-        await session.commit()
-        print(
-            f"✅ 已删除 {len(existing_voices)} 个旧语音和 {len(existing_clone_jobs)} 个克隆任务\n"
-        )
-
         imported = 0
         failed = 0
         skipped = 0
@@ -172,6 +150,14 @@ async def import_voices():
                 print(f"[进度] 已导入 {imported} 个...")
 
             try:
+                # 检查是否已存在（避免重复导入和外键冲突）
+                result = await session.execute(
+                    select(CloneJob).where(CloneJob.uuid == original_id)
+                )
+                existing_clone_job = result.scalar_one_or_none()
+                if existing_clone_job:
+                    skipped += 1
+                    continue
                 # 处理 preview_audio_url: 从 /files/... 转换为本地路径
                 preview_audio_url = voice_data.get("preview_audio_url", "")
                 preview_audio_path = ""
