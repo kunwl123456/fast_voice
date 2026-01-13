@@ -536,17 +536,30 @@ async def console_delete_voice(
 
     ### 功能说明
     - 删除指定的音色及其相关文件
+    - 支持通过音色 UUID 或克隆任务 UUID 删除
     - 只有音色拥有者可以删除
     - 会删除预览音频文件和头像文件（如果存在）
 
     ### 权限要求
     - 需要 Console 认证（Bearer Token）
     - 只有音色拥有者可以删除
+
+    ### 参数说明
+    - voice_uuid: 可以是音色的 UUID，也可以是克隆任务的 UUID（clone_job_uuid）
     """
-    # 查找音色
+    # 先尝试通过音色 UUID 查找
     v = (
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
+    
+    # 如果没找到，尝试通过克隆任务 UUID 查找
+    if not v:
+        v = (
+            await db.execute(
+                select(Voice).where(Voice.clone_job_uuid == voice_uuid)
+            )
+        ).scalar_one_or_none()
+    
     if not v:
         raise NotFoundException(
             error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
@@ -565,7 +578,7 @@ async def console_delete_voice(
     await db.delete(v)
     await db.commit()
 
-    return success_response("删除成功", {"voice_uuid": voice_uuid})
+    return success_response("删除成功", {"voice_uuid": v.uuid})
 
 
 @openapi_router.delete(
@@ -581,17 +594,30 @@ async def openapi_delete_voice(
 
     ### 功能说明
     - 删除指定的音色及其相关文件
+    - 支持通过音色 UUID 或克隆任务 UUID 删除
     - 只有音色拥有者可以删除
     - 会删除预览音频文件和头像文件（如果存在）
 
     ### 权限要求
     - 需要 OpenAPI 认证（API Key）
     - 只有音色拥有者可以删除
+
+    ### 参数说明
+    - voice_uuid: 可以是音色的 UUID，也可以是克隆任务的 UUID（clone_job_uuid）
     """
-    # 查找音色
+    # 先尝试通过音色 UUID 查找
     v = (
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
+    
+    # 如果没找到，尝试通过克隆任务 UUID 查找
+    if not v:
+        v = (
+            await db.execute(
+                select(Voice).where(Voice.clone_job_uuid == voice_uuid)
+            )
+        ).scalar_one_or_none()
+    
     if not v:
         raise NotFoundException(
             error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
@@ -610,4 +636,4 @@ async def openapi_delete_voice(
     await db.delete(v)
     await db.commit()
 
-    return success_response("删除成功", {"voice_uuid": voice_uuid})
+    return success_response("删除成功", {"voice_uuid": v.uuid})
