@@ -287,7 +287,7 @@ async def official_voices(
     limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
     offset: int = Query(0, ge=0, description="偏移量，用于分页"),
     orderBy: str = Query(
-        "createdAt",
+        "likes",
         description="排序字段: likes(点赞), usage(使用次数), chars(生成字符数), createdAt(创建时间)",
     ),
 ):
@@ -379,7 +379,7 @@ async def public_voices(
     limit: int = Query(20, ge=1, le=100, description="每页返回数量"),
     offset: int = Query(0, ge=0, description="偏移量，用于分页"),
     orderBy: str = Query(
-        "createdAt",
+        "likes",
         description="排序字段: likes(点赞), usage(使用次数), chars(生成字符数), createdAt(创建时间)",
     ),
 ):
