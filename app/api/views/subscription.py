@@ -96,4 +96,10 @@ async def upgrade_subscription(
     result = await upgrade_user_subscription(
         db, user, payload.plan, payload.months, payload.pay_type
     )
-    return success_response("订阅升级成功", result.model_dump())
+    resp = UpgradeSubscriptionOut(
+        plan=payload.plan,
+        pay_type=payload.pay_type,
+        expires_at=result.expires_at,
+        extra=result.extra,
+    )
+    return success_response("操作成功", resp.model_dump())

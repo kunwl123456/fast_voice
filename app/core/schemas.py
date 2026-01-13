@@ -298,8 +298,9 @@ class UpgradeSubscriptionOut(BaseModel):
     """升级订阅成功返回的数据"""
 
     plan: str = Field(description="订阅计划（pro/enterprise）")
-    ends_at: str = Field(description="订阅到期时间")
-    credits_added: int = Field(description="赠送的积分数")
+    pay_type: str = Field(description="支付方式")
+    expires_at: str = Field(description="订单过期时间")
+    extra: dict = Field(description="支付数据")
 
 
 class VoiceOut(BaseModel):

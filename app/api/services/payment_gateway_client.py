@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 import hashlib
 import traceback
 from uuid import UUID
@@ -327,8 +328,6 @@ class PaymentGatewayClient:
         # 这里需要根据支付网关的签名算法来实现
         # 示例:使用HMAC-SHA256
         try:
-            import json
-
             payload_str = json.dumps(payload, sort_keys=True, separators=(",", ":"))
             expected_signature = hmac.new(
                 secret.encode("utf-8"), payload_str.encode("utf-8"), hashlib.sha256
@@ -384,7 +383,7 @@ class PaymentGatewayClient:
                         error_data,
                     )
 
-                return response.json()
+                return response.json()["data"]
 
         except httpx.HTTPError as e:
             logger.error(f"[PaymentGateway] HTTP 请求失败: {e}")

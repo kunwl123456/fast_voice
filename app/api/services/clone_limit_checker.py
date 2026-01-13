@@ -57,10 +57,12 @@ async def check_clone_limit(db: AsyncSession, user: User) -> tuple[bool, int, in
             f"用户 {user.email} 超过克隆位限制: {current_count}/{clone_limit}"
         )
         # 获取用户的订阅计划代码
-        from app.api.services.plan_config import get_plan_config_by_id
-
-        plan_config = await get_plan_config_by_id(db, user.subscription_plan_id)
-        plan_code = plan_config.plan_code if plan_config else "unknown"
+        plan_config_for_code = await get_plan_config_by_id(
+            db, user.subscription_plan_id
+        )
+        plan_code = (
+            plan_config_for_code.plan_code if plan_config_for_code else "unknown"
+        )
 
         raise BadRequestException(
             message=f"已达到克隆位上限（{clone_limit}个），请升级订阅计划或删除旧克隆",
