@@ -83,7 +83,6 @@ __all__ = [
     "analytics_router",
     "credits_router",
     "subscription_router",
-    "payment_router",
     "orders_router",
     "clone_console_router",
     "tts_console_router",
