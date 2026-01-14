@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, Query, Path, File, UploadFile
 
-from app.core.models import User, Voice
+from app.core.models import User, Voice, TTSJob, JobStatus
 from app.core.responses import success_response
 from app.core.deps import get_db, require_console, require_openapi, OpenAPIPrincipal
 from app.api.services.storage import (
@@ -571,6 +571,26 @@ async def console_delete_voice(
             message="无权删除该音色", error=VoiceError.VOICE_NOT_FOUND
         )
 
+    # 检查是否有正在运行中的 TTS 任务（queued 或 running 状态）
+    active_tts_jobs = (
+        await db.execute(
+            select(TTSJob).where(
+                TTSJob.voice_uuid == v.uuid,
+                TTSJob.status.in_([JobStatus.queued, JobStatus.running])
+            )
+        )
+    ).scalars().all()
+    
+    if active_tts_jobs:
+        raise BadRequestException(
+            message=f"该音色正在被 {len(active_tts_jobs)} 个 TTS 任务使用（进行中），无法删除。请等待任务完成后再删除。",
+            error=VoiceError.VOICE_IN_USE,
+        )
+    
+    # 注意：已完成的 TTS 任务记录会自动保留，voice_uuid 会被数据库自动设置为 NULL
+    # （通过外键约束 ON DELETE SET NULL）
+    # 音频文件也会保留，因为它们是用户已付费生成的资源
+
     # 删除相关文件
     _delete_voice_files(v)
 
@@ -628,6 +648,26 @@ async def openapi_delete_voice(
         raise PermissionException(
             message="无权删除该音色", error=VoiceError.VOICE_NOT_FOUND
         )
+
+    # 检查是否有正在运行中的 TTS 任务（queued 或 running 状态）
+    active_tts_jobs = (
+        await db.execute(
+            select(TTSJob).where(
+                TTSJob.voice_uuid == v.uuid,
+                TTSJob.status.in_([JobStatus.queued, JobStatus.running])
+            )
+        )
+    ).scalars().all()
+    
+    if active_tts_jobs:
+        raise BadRequestException(
+            message=f"该音色正在被 {len(active_tts_jobs)} 个 TTS 任务使用（进行中），无法删除。请等待任务完成后再删除。",
+            error=VoiceError.VOICE_IN_USE,
+        )
+    
+    # 注意：已完成的 TTS 任务记录会自动保留，voice_uuid 会被数据库自动设置为 NULL
+    # （通过外键约束 ON DELETE SET NULL）
+    # 音频文件也会保留，因为它们是用户已付费生成的资源
 
     # 删除相关文件
     _delete_voice_files(v)

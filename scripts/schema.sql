@@ -105,7 +105,7 @@ CREATE TABLE tts_jobs (
     id SERIAL PRIMARY KEY,
     uuid VARCHAR(36) NOT NULL UNIQUE,
     user_id INTEGER NOT NULL REFERENCES users(id),
-    voice_uuid VARCHAR(36) NOT NULL REFERENCES voices(uuid),
+    voice_uuid VARCHAR(36) REFERENCES voices(uuid) ON DELETE SET NULL,
     text TEXT NOT NULL,
     text_utf8_bytes INTEGER NOT NULL,
     cost_credits INTEGER NOT NULL,

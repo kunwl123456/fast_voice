@@ -210,6 +210,9 @@ class VoiceError:
 
     # 409 Conflict
     VOICE_NAME_EXISTS = _make_code(HTTP_409_CONFLICT, Module.VOICE, 1, "音色名称已存在")
+    VOICE_IN_USE = _make_code(
+        HTTP_409_CONFLICT, Module.VOICE, 2, "音色正在使用中，无法删除"
+    )
 
 
 # ============================================================================

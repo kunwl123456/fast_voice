@@ -234,9 +234,9 @@ class TTSJob(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), index=True
     )  # 调用方（用户）
-    voice_uuid: Mapped[str] = mapped_column(
-        String(36), ForeignKey("voices.uuid"), index=True
-    )  # 使用的音色 UUID
+    voice_uuid: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("voices.uuid", ondelete="SET NULL"), index=True, nullable=True
+    )  # 使用的音色 UUID（音色删除后自动设为 NULL）
     text: Mapped[str] = mapped_column(Text)  # 输入文本
     text_utf8_bytes: Mapped[int] = mapped_column(
         Integer
