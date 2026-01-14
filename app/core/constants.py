@@ -32,7 +32,7 @@ class OrderStatus(str, Enum):
 
     pending = "pending"  # 待支付
     paid = "paid"  # 已支付
-    fulfilled = "fulfilled"  # 已完成（业务处理完成）
+    fulfilled = "fulfilled"  # 已完成（业务处理完成，如订阅已成功）
     failed = "failed"  # 失败
     cancelled = "cancelled"  # 已取消
     expired = "expired"  # 已过期

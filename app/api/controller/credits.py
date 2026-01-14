@@ -2,34 +2,28 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.models import CreditTransaction, User, CreditPackage, Order
+from app.api.controller.orders import create_order
+from app.api.services.billing import get_or_create_account
+from app.core.error_codes import CreditError
+from app.core.exceptions import BadRequestException, NotFoundException
+from app.core.models import CreditTransaction, User, CreditPackage
 from app.core.schemas import (
     CreditAccountOut,
     CreditTxOut,
     CreditPackageOut,
     BuyCreditIn,
     BuyCreditOut,
-)
-from app.api.services.billing import get_or_create_account
-from app.api.services.payment_gateway_client import (
-    get_payment_gateway_client,
-    PaymentGatewayError,
+    CreateOrderIn,
 )
 from app.core.constants import (
     OrderType,
-    OrderStatus,
     PaymentProvider,
-    ORDER_EXPIRE_MINUTES,
+    Currency,
 )
-from app.core.exceptions import BadRequestException, NotFoundException
-from app.core.error_codes import CreditError, PaymentError
-from app.core.config import settings
-from app.tools.common import tz_now
 
 
 async def get_user_credit_balance(db: AsyncSession, user: User) -> CreditAccountOut:
@@ -117,7 +111,12 @@ async def buy_credits(
     """
     创建积分购买订单并返回支付信息
     """
-    payment_method = payload.pay_type or PaymentProvider.alipay
+    all_pay_types = list(PaymentProvider.__members__.keys())
+    if payload.pay_type not in all_pay_types:
+        raise BadRequestException(
+            error=CreditError.INVALID_PAY_TYPE,
+            data={"valid_pay_types": all_pay_types},
+        )
 
     # 防御性校验：理论上已由 Pydantic 校验（ge=1），但这里保证错误码一一对应
     quantity = int(payload.quantity or 1)
@@ -144,9 +143,6 @@ async def buy_credits(
 
     total_price = int(pkg.price) * quantity
     total_credits = int(pkg.credits) * quantity
-
-    expires_at = tz_now() + timedelta(minutes=ORDER_EXPIRE_MINUTES)
-
     extra_metadata = {
         "credit_package_code": pkg.code,
         "credit_package_name": pkg.name,
@@ -158,94 +154,27 @@ async def buy_credits(
         "currency": pkg.currency,
         "product_name": pkg.name,
     }
-
-    # 创建订单
-    order = Order(
-        user_id=user.id,
-        order_type=OrderType.credit_recharge,
-        product_id=None,
-        quantity=quantity,
-        amount=total_price,
-        currency=pkg.currency,
-        status=OrderStatus.pending,
-        payment_method=payment_method,
-        expires_at=expires_at,
-        extra_metadata=extra_metadata,
-    )
-    db.add(order)
-    await db.flush()
-    await db.refresh(order)
-
-    # 创建支付
-    try:
-        try:
-            payment_client = get_payment_gateway_client()
-        except ValueError as e:
-            # 支付网关配置缺失/不合法
-            order.status = OrderStatus.failed
-            em = order.extra_metadata or {}
-            em["error_message"] = str(e)
-            order.extra_metadata = em
-            await db.commit()
-            raise BadRequestException(
-                error=PaymentError.PAYMENT_GATEWAY_CONFIG_ERROR,
-                message=str(e),
-            )
-
-        payment_result = await payment_client.create_payment(
-            merchant_order_no=order.order_no,
-            provider=str(payment_method.value),
-            currency=pkg.currency,
+    res = await create_order(
+        db,
+        user,
+        CreateOrderIn(
+            order_type=OrderType.credit_recharge,
+            currency=Currency(pkg.currency),
             quantity=quantity,
-            unit_amount=int(pkg.price),
+            product_id=pkg.id,
             product_name=pkg.name,
-            product_desc=f"用户 {user.email} 购买 {pkg.name}（{total_credits}积分）",
-            notify_url=settings.payment_callback_url,
-            expire_minutes=ORDER_EXPIRE_MINUTES,
-            success_url=settings.payment_success_url,
-            cancel_url=settings.payment_cancel_url,
-            metadata={
-                "customer_name": user.display_name,
-                "customer_email": user.email,
-                "merchant_order_no": order.order_no,
-                "package_code": pkg.code,
-                "credits_total": str(total_credits),
-            },
-        )
-        order.payment_id = str(payment_result.payment_id)
-    except PaymentGatewayError as e:
-        order.status = OrderStatus.failed
-        em = order.extra_metadata or {}
-        em["error_message"] = e.message
-        em["gateway_error_code"] = e.code
-        order.extra_metadata = em
-        await db.commit()
-        raise BadRequestException(
-            error=PaymentError.CREATE_PAYMENT_FAILED,
-            message=e.message,
-            data={"gateway_error_code": e.code},
-        )
-    except Exception as e:
-        order.status = OrderStatus.failed
-        em = order.extra_metadata or {}
-        em["error_message"] = str(e)
-        order.extra_metadata = em
-        await db.commit()
-        raise BadRequestException(
-            error=PaymentError.CREATE_PAYMENT_FAILED,
-            message=str(e),
-        )
-
-    await db.commit()
-    await db.refresh(order)
-
+            unit_price=pkg.price,
+            payment_method=payload.pay_type,
+            extra_metadata=extra_metadata,
+        ),
+    )
     return BuyCreditOut(
         package_code=pkg.code,
         name=pkg.name,
-        pay_type=str(payment_method.value),
+        pay_type=payload.pay_type,
         credits=total_credits,
         currency=pkg.currency,
         price=total_price,
-        extra=payment_result.payload,
-        expires_at=order.expires_at,
+        extra=res.extra,
+        expires_at=res.expires_at,
     )

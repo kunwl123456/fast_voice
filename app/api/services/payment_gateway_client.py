@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import enum
 import hashlib
 import traceback
 from uuid import UUID
@@ -19,6 +20,13 @@ import httpx
 from loguru import logger
 
 from app.core.constants import OrderStatus
+
+
+class PaymentStatus(str, enum.Enum):
+    pending = "pending"
+    succeeded = "succeeded"
+    failed = "failed"
+    canceled = "canceled"
 
 
 @dataclass
@@ -432,15 +440,12 @@ def map_payment_status_to_order_status(payment_status: str) -> OrderStatus:
     Returns:
         订单状态
     """
+    # 严格对齐支付网关状态（不做兼容）：pending / succeeded / failed / canceled
+    # 注意：业务订单状态有 paid/fulfilled 等语义，因此这里做最小必要映射。
     status_map = {
-        "pending": OrderStatus.pending,
-        "processing": OrderStatus.pending,
-        "succeeded": OrderStatus.paid,
-        "completed": OrderStatus.paid,
-        "failed": OrderStatus.cancelled,
-        "canceled": OrderStatus.cancelled,
-        "cancelled": OrderStatus.cancelled,
-        "refunded": OrderStatus.refunded,
-        "expired": OrderStatus.expired,
+        PaymentStatus.pending.value: OrderStatus.pending,
+        PaymentStatus.succeeded.value: OrderStatus.paid,
+        PaymentStatus.failed.value: OrderStatus.failed,
+        PaymentStatus.canceled.value: OrderStatus.cancelled,
     }
-    return status_map.get(payment_status.lower(), OrderStatus.cancelled)
+    return status_map.get(payment_status.lower(), OrderStatus.failed)

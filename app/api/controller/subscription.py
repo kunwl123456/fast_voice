@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from loguru import logger
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.tools.common import tz_now
 from app.core.schemas import CreateOrderIn
 from app.core.error_codes import SubscriptionError
 from app.api.controller.orders import create_order
@@ -20,7 +18,6 @@ from app.api.services.clone_limit_checker import get_clone_usage
 from app.api.services.plan_config import query_plan_config, get_plan_config_by_id
 from app.core.models import (
     User,
-    Order,
     CreditAccount,
     CreditTransaction,
     SubscriptionPlanConfig,
@@ -38,8 +35,6 @@ from app.core.constants import (
     CAN_UPGRADE_PLANS,
     SUBSCRIPTION_MIN_MONTHS,
     SUBSCRIPTION_MAX_MONTHS,
-    SUBSCRIPTION_DAYS_PER_MONTH,
-    OrderStatus,
 )
 
 
@@ -143,8 +138,8 @@ async def get_user_subscription(user: User, db: AsyncSession) -> SubscriptionInf
     clone_available = clone_total - clone_usage
 
     return SubscriptionInfo(
-        plan=plan_config.plan_code,
-        plan_name=plan_config.name,
+        plan=str(plan_config.plan_code),
+        plan_name=str(plan_config.name),
         status=status,
         ends_at=user.subscription_ends_at,
         features={
@@ -217,11 +212,12 @@ async def upgrade_user_subscription(
         )
 
     extra_metadata = {
-        "months": months,
-        "plan_name": plan_config.name,
+        "quantity": months,
+        "currency": plan_config.currency,
+        "product_name": plan_config.name,
         "plan_code": plan_config.plan_code,
-        "monthly_price": plan_config.monthly_price,
-        "plan_currency": plan_config.currency,
+        "unit_price": plan_config.monthly_price,
+        "total_price": plan_config.monthly_price * months,
     }
     return await create_order(
         db,
@@ -237,93 +233,3 @@ async def upgrade_user_subscription(
             extra_metadata=extra_metadata,
         ),
     )
-
-
-async def handle_subscription_callback(db: AsyncSession, payload: dict) -> bool:
-
-    order_no = payload["merchant_order_no"]
-    payment_status = payload["status"]
-
-    oqs = await db.execute(select(Order).where(Order.order_no == order_no))
-    order: Order = oqs.scalar_one_or_none()
-    if not order:
-        logger.error(f"订单不存在：{order_no=} {payload=}")
-        return False
-    if order.status == OrderStatus.paid:
-        logger.warning(f"订单已处理过：{order_no=}")
-        return True
-    if order.status != OrderStatus.pending:
-        logger.error(f"订单状态异常：{order_no=} status={order.status}")
-        return False
-
-    uqs = await db.execute(select(User).where(User.id == order.user_id))
-    user: User = uqs.scalar_one_or_none()
-    if not user:
-        logger.error(f"用户不存在：user_id={order.user_id} {payload=}")
-        return False
-
-    pqs = await db.execute(
-        select(SubscriptionPlanConfig).where(
-            SubscriptionPlanConfig.id == order.product_id,
-            SubscriptionPlanConfig.is_active.is_(True),
-        )
-    )
-    plan_config: SubscriptionPlanConfig = pqs.scalar_one_or_none()
-    if not plan_config:
-        logger.error(f"订阅计划不存在：plan_config_id={order.product_id} {payload=}")
-        return False
-
-    if payment_status != "succeeded":
-        # 更新订单状态
-        order.status = OrderStatus.failed
-        db.add(order)
-        await db.flush()
-        return True
-
-    else:
-        # 更新订单状态
-        order.status = OrderStatus.paid
-        db.add(order)
-        await db.flush()
-
-        # 计算订阅到期时间
-        now = tz_now()
-
-        # 如果用户当前订阅未过期，从原到期时间续期；否则从现在开始
-        if user.subscription_ends_at and user.subscription_ends_at > now:
-            ends_at = user.subscription_ends_at + timedelta(
-                days=SUBSCRIPTION_DAYS_PER_MONTH * order.quantity
-            )
-        else:
-            ends_at = now + timedelta(days=SUBSCRIPTION_DAYS_PER_MONTH * order.quantity)
-
-        # 更新用户订阅
-        user.subscription_plan_id = plan_config.id
-        user.subscription_ends_at = ends_at
-        db.add(user)
-        await db.flush()
-
-        # 增加账户积分
-        acc = await get_or_create_account(db, user.id)
-        credits_added = plan_config.monthly_credits * order.quantity
-        acc.balance += credits_added
-        db.add(acc)
-        await db.flush()
-
-        # 记录积分流水
-        tx = CreditTransaction(
-            account_id=acc.id,
-            tx_type=TxType.subscription,
-            amount=credits_added,
-            ref_type="subscription",
-            ref_id=f"{plan_config.plan_code}_{order.quantity}m",
-            note=f"订阅{plan_config.name}{order.quantity}个月赠送积分",
-        )
-        db.add(tx)
-        return True
-
-    # return UpgradeSubscriptionOut(
-    #     plan=plan,
-    #     ends_at=format_datetime(ends_at),
-    #     credits_added=credits_added,
-    # )

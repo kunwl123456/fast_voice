@@ -6,7 +6,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import traceback
+from datetime import timedelta
 
 from loguru import logger
 from sqlalchemy import select
@@ -14,11 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.constants import (
+    TxType,
     Currency,
     OrderType,
     OrderStatus,
     PaymentProvider,
     ORDER_EXPIRE_MINUTES,
+    SUBSCRIPTION_DAYS_PER_MONTH,
 )
 from app.core.models import (
     User,
@@ -35,13 +38,14 @@ from app.core.schemas import (
 )
 from app.tools.common import tz_now
 from app.core.error_codes import OrderError, RefundError
-from app.api.services.plan_config import query_plan_config
+from app.api.services.plan_config import get_plan_config_by_id
 from app.core.exceptions import BadRequestException, NotFoundException
+from app.api.services.billing import recharge as recharge_credits
 from app.api.services.payment_gateway_client import (
     get_payment_gateway_client,
     PaymentGatewayError,
+    PaymentStatus,
 )
-from app.api.services.billing import recharge as recharge_credits
 
 
 def _to_cents(amount: float, currency: str) -> int:
@@ -124,10 +128,7 @@ async def create_order(
 
         # 构建回调通知地址
         notify_url = None
-        if (
-            hasattr(settings, "payment_gateway_callback_url")
-            and settings.payment_callback_url
-        ):
+        if settings.payment_callback_url:
             notify_url = settings.payment_callback_url
 
         payment_result = await payment_client.create_payment(
@@ -433,83 +434,182 @@ async def create_refund(
         )
 
 
-async def handle_payment_callback(
-    db: AsyncSession,
-    order_id: str,
-    payment_id: str,
-    status: str,
-    paid_amount: float | None = None,
-    paid_at: datetime | None = None,
-    error_message: str | None = None,
-) -> Order:
+async def handle_payment_callback(db: AsyncSession, payload: dict) -> bool:
     """
-    处理支付网关回调
-
-    Args:
-        db: 数据库会话
-        order_id: 业务订单号
-        payment_id: 支付网关支付ID
-        status: 支付状态
-        paid_amount: 实际支付金额
-        paid_at: 支付时间
-        error_message: 错误信息
-
-    Returns:
-        更新后的订单
+    处理支付网关「支付回调」事件（按 order_type 分发：订阅 / 购买积分）
     """
-    # 查找订单
+    status = payload.get("status")
+    payment_id = payload.get("payment_id")
+    order_no = payload.get("merchant_order_no")
+    if not all([status, payment_id, order_no]):
+        logger.error(f"支付回调缺少必要字段: {payload=}")
+        return False
+
+    # 查找订单（加锁保证并发安全）
     result = await db.execute(
-        select(Order).where(Order.order_no == order_id).with_for_update()
+        select(Order).where(Order.order_no == order_no).with_for_update()
     )
     order = result.scalar_one_or_none()
-
     if not order:
-        logger.warning(f"回调订单不存在: order_id={order_id}")
-        raise NotFoundException(OrderError.ORDER_NOT_FOUND)
+        logger.error(f"回调订单不存在: order_no={order_no} {payload=}")
+        return False
 
-    # 幂等性检查：如果订单已经处理过，直接返回
+    # 安全校验：如果订单已经记录过 payment_id，则必须与回调保持一致
+    # （防止伪造回调把别人的订单号 + 自己的 payment_id 混在一起）
+    if order.payment_id and str(order.payment_id) != str(payment_id):
+        logger.error(
+            "支付回调 payment_id 不匹配: "
+            f"order_no={order_no}, order.payment_id={order.payment_id}, callback.payment_id={payment_id}"
+        )
+        return False
+
+    # 幂等：已完成/已退款不重复处理
     if order.status in [OrderStatus.fulfilled, OrderStatus.refunded]:
-        logger.info(f"订单已处理过: order_id={order_id}, status={order.status.value}")
-        return order
+        logger.info(f"订单已处理过: order_no={order_no}, status={order.status.value}")
+        return True
 
-    # 根据支付状态更新订单
-    if status in ["succeeded", "completed"]:
-        order.status = OrderStatus.paid
-        order.paid_at = paid_at or tz_now()
+    # 防重复履约：历史版本可能存在“paid 已落库但未履约/未标记 fulfilled”的中间态。
+    # 这里优先保证不会重复加积分/重复延长订阅；需要补偿的 paid 订单可通过后台对账/脚本处理。
+    if order.status == OrderStatus.paid:
+        logger.info(f"订单已是 paid，跳过重复履约: order_no={order_no}")
+        return True
 
-        # 执行业务处理
-        await _fulfill_order(db, order)
+    status_norm = str(status).lower()
+    match status_norm:
 
-    elif status == "failed":
-        order.status = OrderStatus.cancelled
-        order.extra_metadata = order.extra_metadata or {}
-        order.extra_metadata["error_message"] = error_message or "支付失败"
+        # - pending: 保持待支付（仅记录网关状态），不履约
+        case PaymentStatus.pending.value:
+            order.status = OrderStatus.pending
+            em = order.extra_metadata or {}
+            em["gateway_status"] = status_norm
+            em["gateway_payment_id"] = payment_id
+            order.extra_metadata = em
+            db.add(order)
+            await db.flush()
+            return True
 
-    elif status in ["cancelled", "canceled"]:
-        order.status = OrderStatus.cancelled
-        order.extra_metadata = order.extra_metadata or {}
-        order.extra_metadata["error_message"] = error_message or "支付已取消"
+        case "failed":
+            # - failed: 标记失败
+            order.status = OrderStatus.failed
+            em = order.extra_metadata or {}
+            em["gateway_status"] = status_norm
+            em["gateway_payment_id"] = payment_id
+            em["error_message"] = (
+                payload.get("error_message")
+                or payload.get("message")
+                or em.get("error_message", "")
+            )
+            order.extra_metadata = em
+            db.add(order)
+            await db.flush()
+            return True
 
-    elif status == "expired":
-        order.status = OrderStatus.expired
-        order.extra_metadata = order.extra_metadata or {}
-        order.extra_metadata["error_message"] = error_message or "订单已过期"
+        case "canceled":
+            # - canceled: 标记已取消
+            order.status = OrderStatus.cancelled
+            em = order.extra_metadata or {}
+            em["gateway_status"] = status_norm
+            em["gateway_payment_id"] = payment_id
+            order.extra_metadata = em
+            db.add(order)
+            await db.flush()
+            return True
 
-    else:
-        logger.warning(f"未知的支付状态: status={status}")
+        # - succeeded: 支付成功，标记 paid 并履约
+        case PaymentStatus.succeeded.value:
+            order.status = OrderStatus.paid
+            order.paid_at = tz_now()
+            em = order.extra_metadata or {}
+            em["gateway_status"] = status_norm
+            em["gateway_payment_id"] = payment_id
+            order.extra_metadata = em
 
-    await db.commit()
-    await db.refresh(order)
+            try:
+                is_fulfilled, msg = await _fulfill_order(db, order)
+                if is_fulfilled:
+                    order.status = OrderStatus.fulfilled
+                else:
+                    order.status = OrderStatus.failed
+                    em = order.extra_metadata or {}
+                    em["fulfill_error"] = msg or "订单履约失败"
+                    order.extra_metadata = em
+            except Exception as _:
+                # 履约失败：记录错误并标记失败，让支付中台按策略重试/人工排查
+                logger.error(f"订单履约失败：{traceback.format_exc()}")
+                order.status = OrderStatus.failed
+                em = order.extra_metadata or {}
+                em["fulfill_error"] = "订单履约异常"
+                order.extra_metadata = em
 
-    logger.info(
-        f"处理支付回调: order_id={order_id}, payment_id={payment_id}, "
-        f"status={status} -> order_status={order.status.value}"
+            db.add(order)
+            await db.flush()
+            logger.info(
+                f"处理支付回调成功: order_no={order.order_no}, type={order.order_type.value}, "
+                f"gateway_payment_id={payment_id}, status={status_norm}"
+            )
+            return True
+
+        case _:
+            # 未知状态：不确认，交由网关重试/人工排查
+            logger.warning(
+                f"未知支付状态: order_no={order_no}, status={status_norm} {payload=}"
+            )
+            return False
+
+
+async def handle_refund_callback(db: AsyncSession, payload: dict) -> bool:
+    """
+    处理支付网关「退款回调」事件（按 order_type 分发：订阅 / 购买积分）
+
+    当前版本仅同步订单状态为 refunded（不做业务侧回滚）。
+    """
+    status = payload.get("status")
+    payment_id = payload.get("payment_id")
+    order_no = payload.get("merchant_order_no")
+    if not order_no or not status:
+        logger.error(f"退款回调缺少必要字段: {payload=}")
+        return False
+
+    result = await db.execute(
+        select(Order).where(Order.order_no == order_no).with_for_update()
     )
+    order = result.scalar_one_or_none()
+    if not order:
+        logger.error(f"退款回调订单不存在: order_no={order_no} {payload=}")
+        return False
 
-    return order
+    # 幂等：已退款直接返回
+    if order.status == OrderStatus.refunded:
+        logger.info(f"订单已退款(幂等): order_no={order_no}")
+        return True
+
+    status_norm = str(status).lower()
+    if status_norm in ["refunded", "succeeded", "completed"]:
+        order.status = OrderStatus.refunded
+    else:
+        # 未知退款状态：不确认成功
+        logger.warning(
+            f"未知退款状态: order_no={order_no}, status={status_norm} {payload=}"
+        )
+        return False
+
+    em = order.extra_metadata or {}
+    em["refund_gateway_status"] = status_norm
+    em["refund_gateway_payment_id"] = payment_id
+    em["refund_id"] = (
+        payload.get("refund_id") or payload.get("id") or em.get("refund_id")
+    )
+    order.extra_metadata = em
+
+    db.add(order)
+    await db.flush()
+    logger.info(
+        f"处理退款回调成功: order_no={order.order_no}, type={order.order_type.value}, status={status_norm}"
+    )
+    return True
 
 
-async def _fulfill_order(db: AsyncSession, order: Order) -> None:
+async def _fulfill_order(db: AsyncSession, order: Order) -> (bool, str):
     """
     执行订单业务处理
 
@@ -519,15 +619,15 @@ async def _fulfill_order(db: AsyncSession, order: Order) -> None:
     """
     if order.order_type == OrderType.credit_recharge:
         # 积分充值
-        await _fulfill_credit_recharge(db, order)
+        return await _fulfill_credit_recharge(db, order)
     elif order.order_type == OrderType.subscription:
         # 订阅购买
-        await _fulfill_subscription(db, order)
+        return await _fulfill_subscription(db, order)
 
-    order.status = OrderStatus.fulfilled
+    return False, "不匹配的订单类型"
 
 
-async def _fulfill_credit_recharge(db: AsyncSession, order: Order) -> None:
+async def _fulfill_credit_recharge(db: AsyncSession, order: Order) -> (bool, str):
     """
     处理积分充值
 
@@ -539,7 +639,7 @@ async def _fulfill_credit_recharge(db: AsyncSession, order: Order) -> None:
     package_code = em.get("credit_package_code") or em.get("package_code")
     if not package_code:
         logger.error(f"积分充值订单缺少档位编码: order_id={order.order_no}")
-        return
+        return False, "积分充值订单缺少档位编码"
 
     # 查档位（不限制 is_active：历史订单仍需可履约）
     pkg = (
@@ -551,28 +651,30 @@ async def _fulfill_credit_recharge(db: AsyncSession, order: Order) -> None:
         logger.error(
             f"积分充值订单档位不存在: order_id={order.order_no}, package_code={package_code}"
         )
-        return
+        return False, f"积分充值订单档位不存在：{package_code=}"
 
     quantity = int(order.quantity or 1)
     credits_to_add = int(pkg.credits) * quantity
-    note = f"购买积分：{pkg.name} x{quantity}"
 
     # 入账（带行锁，原子增加余额并写流水）
     await recharge_credits(
         db=db,
         user_id=order.user_id,
         amount=credits_to_add,
-        note=note,
+        note=f"购买积分：{pkg.name} x{quantity}",
         ref_id=order.order_no,
+        ref_type="recharge",
+        tx_type=TxType.recharge,
+        commit=False,
     )
-
     logger.info(
         f"积分充值履约完成: order_id={order.order_no}, "
         f"package={pkg.code}, credits={credits_to_add}"
     )
+    return True, ""
 
 
-async def _fulfill_subscription(db: AsyncSession, order: Order) -> None:
+async def _fulfill_subscription(db: AsyncSession, order: Order) -> (bool, str):
     """
     处理订阅购买
 
@@ -584,15 +686,17 @@ async def _fulfill_subscription(db: AsyncSession, order: Order) -> None:
     months = order.quantity or 0
     if months <= 0:
         logger.error(f"订阅订单缺少订阅月数: order_id={order.order_no}")
-        return
+        return False, "订阅订单缺少订阅月数"
 
-    # 订阅计划
-    plan_config = await query_plan_config(
-        db, str(order.subscription_plan_config.plan_code)
-    )
+    # 订阅计划（使用订单上的 product_id，避免依赖 relationship 的懒加载）
+    if not order.product_id:
+        logger.error(f"订阅订单缺少订阅计划ID(product_id): order_id={order.order_no}")
+        return False, "订阅订单缺少订阅计划ID"
+
+    plan_config = await get_plan_config_by_id(db, int(order.product_id))
     if not plan_config:
         logger.error(f"订阅订单缺少订阅计划: order_id={order.order_no}")
-        return
+        return False, "订阅订单缺少订阅计划"
 
     # 获取用户
     result = await db.execute(select(User).where(User.id == order.user_id))
@@ -600,23 +704,41 @@ async def _fulfill_subscription(db: AsyncSession, order: Order) -> None:
 
     if not user:
         logger.error(f"用户不存在: user_id={order.user_id}")
-        return
-
-    # 更新订阅计划（使用外键ID）
-    user.subscription_plan_id = plan_config.id
+        return False, "用户不存在"
 
     # 计算订阅到期时间
     now = tz_now()
     if user.subscription_ends_at and user.subscription_ends_at > now:
         # 如果当前订阅未过期，在原有基础上延长
-        new_end_time = user.subscription_ends_at + timedelta(days=30 * months)
+        new_end_time = user.subscription_ends_at + timedelta(
+            days=SUBSCRIPTION_DAYS_PER_MONTH * months
+        )
     else:
         # 如果当前订阅已过期或没有订阅，从现在开始计算
-        new_end_time = now + timedelta(days=30 * months)
+        new_end_time = now + timedelta(days=SUBSCRIPTION_DAYS_PER_MONTH * months)
 
+    # 更新订阅计划
+    user.subscription_plan_id = plan_config.id
     user.subscription_ends_at = new_end_time
+    db.add(user)
+
+    # 订阅赠送积分：按月数一次性入账（可跨月累积）
+    credits_added = int(getattr(plan_config, "monthly_credits", 0) or 0) * int(months)
+    if credits_added > 0:
+        # 入账（带行锁，原子增加余额并写流水）
+        await recharge_credits(
+            db=db,
+            user_id=order.user_id,
+            amount=credits_added,
+            note=f"订阅{plan_config.name}{months}个月赠送积分",
+            ref_id=order.order_no,
+            ref_type="subscription",
+            tx_type=TxType.subscription,
+            commit=False,
+        )
 
     logger.info(
         f"订阅升级成功: user_id={order.user_id}, plan={plan_config.plan_code}, "
-        f"months={months}, ends_at={new_end_time}"
+        f"months={months}, ends_at={new_end_time}, credits_added={credits_added}"
     )
+    return True, ""

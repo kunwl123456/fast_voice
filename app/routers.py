@@ -70,11 +70,6 @@ admin_invite_codes_router = APIRouter(
 docs_router = APIRouter(prefix="/docs", tags=["文档"])
 
 
-# ============= Webhook 路由 =============
-# Stripe Webhook（不需要认证）
-webhook_router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
-
-
 # ============= 回调路由 =============
 # 支付中台回调（内部接口，不需要用户认证）
 callback_router = APIRouter(prefix="/callback", tags=["回调接口"])
@@ -100,8 +95,6 @@ __all__ = [
     "admin_credit_router",
     "admin_invite_codes_router",
     "admin_order_router",
-    # Webhook 路由
-    "webhook_router",
     # 回调路由
     "callback_router",
     # 文档路由
