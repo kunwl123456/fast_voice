@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
+from sqlalchemy import text
 
 from app.core.models import *  # noqa: F401,F403 (ensure models imported for metadata)
 from app.core.exceptions import *
@@ -242,8 +243,20 @@ async def init_db() -> None:
         # 🗑️ 开发模式：每次启动都清空所有表
         print("⚠️  清空所有表...")
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-        print("✅ 所有表已清空")
+            # 使用原始 SQL 删除所有表（CASCADE），处理外键依赖
+            # 这样可以删除遗留的表（如 stripe_payments）以及所有已知的表
+            await conn.execute(
+                text("""
+                DO $$ DECLARE
+                    r RECORD;
+                BEGIN
+                    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+                        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+                    END LOOP;
+                END $$;
+                """)
+            )
+        print("所有表已清空")
 
     # 🏗️ 确保所有表存在（如果不存在则创建）
     print("📦 确保表结构存在...")
