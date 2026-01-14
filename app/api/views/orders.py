@@ -6,11 +6,13 @@ from app.core.deps import require_console, get_db
 from app.core.responses import success_response
 from app.routers import orders_router as router
 from app.api.controller.orders import (
+    get_order_list,
     create_refund as create_refund_controller,
     cancel_order as cancel_order_controller,
 )
 from app.core.schemas import (
     Response,
+    OrderListOut,
     CreateRefundIn,
     OrderDetailOut,
     RefundOut,
@@ -73,6 +75,34 @@ from app.core.schemas import (
 #     """
 #     result = await create_order_controller(db, user, payload)
 #     return success_response("创建订单成功", result.model_dump())
+
+
+@router.get(
+    "",
+    summary="获取订单列表",
+    response_model=Response[list[OrderListOut]],
+)
+async def list_orders(
+    user: User = Depends(require_console),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    获取当前用户的订单列表
+
+    ### 功能说明
+    - 返回最近 50 条订单记录
+    - 按创建时间倒序排列
+
+    ### 订单状态说明
+    - `pending`: 待支付
+    - `paid`: 已支付（等待业务处理）
+    - `fulfilled`: 已完成（业务处理完成）
+    - `cancelled`: 已取消
+    - `expired`: 已过期
+    - `refunded`: 已退款
+    """
+    result = await get_order_list(db, user)
+    return success_response("获取成功", [r.model_dump() for r in result])
 
 
 @router.post(

@@ -42,7 +42,6 @@ from app.routers import (
     voices_openapi_router,
     admin_credit_router,
     admin_invite_codes_router,
-    webhook_router,
     callback_router,
     docs_router,
     admin_order_router,
@@ -54,11 +53,11 @@ import app.api.views.api_keys  # noqa: F401
 import app.api.views.analytics  # noqa: F401
 import app.api.views.credits  # noqa: F401
 import app.api.views.subscription  # noqa: F401
+import app.api.views.orders  # noqa: F401
 import app.admin.views.orders  # noqa: F401
 import app.api.views.clone  # noqa: F401
 import app.api.views.tts  # noqa: F401
 import app.api.views.voices  # noqa: F401
-import app.api.views.webhook  # noqa: F401
 import app.api.views.callback  # noqa: F401
 import app.api.views.docs  # noqa: F401
 import app.admin.views.credit  # noqa: F401
@@ -307,7 +306,6 @@ _app.include_router(tts_console_router)
 _app.include_router(tts_openapi_router)
 _app.include_router(clone_console_router)
 _app.include_router(clone_openapi_router)
-_app.include_router(webhook_router)
 _app.include_router(callback_router)
 _app.include_router(docs_router)
 
