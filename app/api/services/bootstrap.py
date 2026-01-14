@@ -43,7 +43,7 @@ async def init_subscription_plans(db: AsyncSession) -> None:
             "commercial_use": False,
             "priority_support": False,
             "monthly_price": 0,  # 免费
-            "currency": "CNY",
+            "currency": "USD",
             "is_active": True,
         },
         {
@@ -56,7 +56,7 @@ async def init_subscription_plans(db: AsyncSession) -> None:
             "commercial_use": True,
             "priority_support": True,
             "monthly_price": 9900,  # 99 元/月
-            "currency": "CNY",
+            "currency": "USD",
             "is_active": True,
         },
         {
@@ -69,7 +69,7 @@ async def init_subscription_plans(db: AsyncSession) -> None:
             "commercial_use": True,
             "priority_support": True,
             "monthly_price": 99900,  # 999 元/月
-            "currency": "CNY",
+            "currency": "USD",
             "is_active": True,
         },
     ]
@@ -108,7 +108,7 @@ async def init_credit_packages(db: AsyncSession) -> None:
             "code": "credit_500",
             "name": "500 积分",
             "credits": 500,
-            "currency": "CNY",
+            "currency": "USD",
             "price": 5000,  # 50 元
             "is_active": True,
         },
@@ -116,7 +116,7 @@ async def init_credit_packages(db: AsyncSession) -> None:
             "code": "credit_1000",
             "name": "1,000 积分",
             "credits": 1000,
-            "currency": "CNY",
+            "currency": "USD",
             "price": 9000,  # 90 元
             "is_active": True,
         },
@@ -124,7 +124,7 @@ async def init_credit_packages(db: AsyncSession) -> None:
             "code": "credit_5000",
             "name": "5,000 积分",
             "credits": 5000,
-            "currency": "CNY",
+            "currency": "USD",
             "price": 40000,  # 400 元
             "is_active": True,
         },
@@ -132,7 +132,7 @@ async def init_credit_packages(db: AsyncSession) -> None:
             "code": "credit_10000",
             "name": "10,000 积分",
             "credits": 10000,
-            "currency": "CNY",
+            "currency": "USD",
             "price": 70000,  # 700 元
             "is_active": True,
         },

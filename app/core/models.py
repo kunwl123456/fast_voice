@@ -413,8 +413,8 @@ class SubscriptionPlanConfig(Base):
     currency: Mapped[str] = mapped_column(
         String(3),
         nullable=False,
-        default="CNY",
-    )  # ISO 4217 货币代码（默认 CNY）
+        default="USD",
+    )  # ISO 4217 货币代码（默认 USD）
 
     is_active: Mapped[bool] = mapped_column(
         Boolean,
@@ -447,7 +447,7 @@ class CreditPackage(Base):
     code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     credits: Mapped[int] = mapped_column(Integer, nullable=False)
-    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="CNY")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
     price: Mapped[int] = mapped_column(Integer, nullable=False)  # 最小货币单位（分）
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

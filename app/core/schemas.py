@@ -304,7 +304,7 @@ class PlanConfigOut(BaseModel):
     commercial_use: bool = Field(description="是否允许商业使用")
     priority_support: bool = Field(description="是否提供优先支持")
     monthly_price: int = Field(description="月价（整数）")
-    currency: str = Field(description="ISO 4217 货币代码（默认 CNY）")
+    currency: str = Field(description="ISO 4217 货币代码（默认 USD）")
 
 
 class UpgradeSubscriptionIn(BaseModel):
@@ -338,8 +338,12 @@ class UpgradeSubscriptionOut(BaseModel):
 
     plan: str = Field(description="订阅计划（pro/enterprise）")
     pay_type: str = Field(description="支付方式")
-    expires_at: str = Field(description="订单过期时间")
+    expires_at: datetime | str | None = Field(description="订单过期时间")
     extra: dict = Field(description="支付数据")
+
+    @field_serializer("expires_at")
+    def serialize_expires_at(self, dt: datetime | str | None, _info) -> str | None:
+        return format_datetime(dt)
 
 
 class VoiceOut(BaseModel):
