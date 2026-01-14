@@ -150,6 +150,7 @@ async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TT
     job = TTSJob(
         user_id=user_id,
         voice_uuid=voice_uuid,  # 使用从克隆任务获取的 voice_uuid
+        voice_name=voice.name,  # 保存音色名称，即使音色被删除也能显示
         text=payload.text,
         text_utf8_bytes=b,
         cost_credits=cost,
@@ -507,10 +508,10 @@ async def console_get_tts_history(
     )
     total = total_result.scalar() or 0
 
-    # 查询历史记录（关联 Voice 表）
+    # 查询历史记录（关联 Voice 表，使用 LEFT JOIN 以支持音色被删除的情况）
     stmt = (
         select(TTSJob, Voice)
-        .join(Voice, TTSJob.voice_uuid == Voice.uuid)
+        .outerjoin(Voice, TTSJob.voice_uuid == Voice.uuid)
         .where(TTSJob.user_id == user.id)
         .order_by(TTSJob.created_at.desc())
         .offset(offset)
@@ -522,14 +523,16 @@ async def console_get_tts_history(
     # 构建响应数据
     items = []
     for job, voice in rows:
+        # 优先使用 TTSJob 中保存的 voice_name，如果没有则从 Voice 表获取
+        voice_name = job.voice_name or (voice.name if voice else "")
         items.append(
             TTSHistoryItemOut(
                 id=job.uuid,
                 status=job.status.value,
                 text=job.text,
-                voice_uuid=job.voice_uuid,
-                voice_name=voice.name,
-                voice_avatar_url=voice.avatar_url or "",
+                voice_uuid=job.voice_uuid or "",
+                voice_name=voice_name,
+                voice_avatar_url=voice.avatar_url if voice and voice.avatar_url else "",
                 output_audio_url=(
                     to_public_file_url(job.output_audio_path)
                     if job.output_audio_path
@@ -611,10 +614,10 @@ async def openapi_get_tts_history(
     )
     total = total_result.scalar() or 0
 
-    # 查询历史记录（关联 Voice 表）
+    # 查询历史记录（关联 Voice 表，使用 LEFT JOIN 以支持音色被删除的情况）
     stmt = (
         select(TTSJob, Voice)
-        .join(Voice, TTSJob.voice_uuid == Voice.uuid)
+        .outerjoin(Voice, TTSJob.voice_uuid == Voice.uuid)
         .where(TTSJob.user_id == principal.user.id)
         .order_by(TTSJob.created_at.desc())
         .offset(offset)
@@ -626,14 +629,16 @@ async def openapi_get_tts_history(
     # 构建响应数据
     items = []
     for job, voice in rows:
+        # 优先使用 TTSJob 中保存的 voice_name，如果没有则从 Voice 表获取
+        voice_name = job.voice_name or (voice.name if voice else "")
         items.append(
             TTSHistoryItemOut(
                 id=job.uuid,
                 status=job.status.value,
                 text=job.text,
-                voice_uuid=job.voice_uuid,
-                voice_name=voice.name,
-                voice_avatar_url=voice.avatar_url or "",
+                voice_uuid=job.voice_uuid or "",
+                voice_name=voice_name,
+                voice_avatar_url=voice.avatar_url if voice and voice.avatar_url else "",
                 output_audio_url=(
                     to_public_file_url(job.output_audio_path)
                     if job.output_audio_path
