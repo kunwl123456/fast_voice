@@ -81,12 +81,37 @@ def _validate_voice_avatar_file(
     return file_ext
 
 
-def _voice_out(v: Voice) -> VoiceOut:
+def _voice_out(v: Voice, is_official: bool = False) -> VoiceOut:
+    """
+    将 Voice 模型转换为 VoiceOut schema
+    
+    Args:
+        v: Voice 模型实例
+        is_official: 是否为官方音色。如果是，将 description 从 "|" 分隔格式转换为多语言 map
+    
+    Returns:
+        VoiceOut schema 实例
+    """
+    # 处理 description：如果是官方音色，将 "|" 分隔的字符串转换为多语言 map
+    description: dict[str, str] | str = v.description
+    if is_official and v.description:
+        # 格式：简体|繁体|日语|韩语|英语
+        parts = v.description.split("|")
+        if len(parts) == 5:
+            description = {
+                "zh": parts[0].strip(),      # 简体中文
+                "zh_tw": parts[1].strip(),   # 繁体中文
+                "jp": parts[2].strip(),      # 日语
+                "ko": parts[3].strip(),      # 韩语
+                "en": parts[4].strip(),      # 英语
+            }
+        # 如果格式不对，保持原字符串
+    
     return VoiceOut(
         id=v.uuid,  # 返回 UUID 而不是数字 ID
         name=v.name,
         avatar_url=v.avatar_url,
-        description=v.description,
+        description=description,
         tags=v.tags or [],
         is_public=v.is_public,
         preview_audio_url=(
@@ -348,7 +373,8 @@ async def official_voices(
     # 执行查询
     voices = (await db.execute(query)).scalars().all()
 
-    voices_data = [_voice_out(v).model_dump() for v in voices]
+    # 官方音色的 description 需要转换为多语言 map 格式
+    voices_data = [_voice_out(v, is_official=True).model_dump() for v in voices]
     return success_response("获取成功", voices_data)
 
 

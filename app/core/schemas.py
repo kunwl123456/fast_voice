@@ -267,7 +267,7 @@ class VoiceOut(BaseModel):
     id: str = Field(description="音色 UUID")
     name: str = Field(description="音色名称")
     avatar_url: str = Field(default="", description="音色头像 URL")
-    description: str = Field(description="音色描述")
+    description: dict[str, str] | str = Field(description="音色描述（官方音色返回多语言map，其他返回字符串）")
     tags: list[str] = Field(default=[], description="音色标签列表")
     is_public: bool = Field(description="是否公开")
     preview_audio_url: str = Field(default="", description="预览音频 URL")
