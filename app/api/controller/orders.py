@@ -710,23 +710,38 @@ async def _fulfill_credit_recharge(db: AsyncSession, order: Order) -> (bool, str
         db: 数据库会话
         order: 订单对象
     """
-    em = order.extra_metadata or {}
-    package_code = em.get("credit_package_code") or em.get("package_code")
-    if not package_code:
-        logger.error(f"积分充值订单缺少档位编码: order_id={order.order_no}")
-        return False, "积分充值订单缺少档位编码"
+    pkg = None
+    if order.product_id:
+        pkg = (
+            await db.execute(
+                select(CreditPackage).where(CreditPackage.id == order.product_id)
+            )
+        ).scalar_one_or_none()
+        if not pkg:
+            logger.error(
+                f"积分充值订单档位不存在: order_id={order.order_no}, product_id={order.product_id}"
+            )
+            return False, "积分充值订单档位不存在"
 
-    # 查档位（不限制 is_active：历史订单仍需可履约）
-    pkg = (
-        await db.execute(
-            select(CreditPackage).where(CreditPackage.code == package_code)
-        )
-    ).scalar_one_or_none()
+    # 回退兼容历史订单：使用 extra_metadata 里的档位编码
     if not pkg:
-        logger.error(
-            f"积分充值订单档位不存在: order_id={order.order_no}, package_code={package_code}"
-        )
-        return False, f"积分充值订单档位不存在：{package_code=}"
+        em = order.extra_metadata or {}
+        package_code = em.get("credit_package_code") or em.get("package_code")
+        if not package_code:
+            logger.error(f"积分充值订单缺少档位信息: order_id={order.order_no}")
+            return False, "积分充值订单缺少档位信息"
+
+        # 查档位（不限制 is_active：历史订单仍需可履约）
+        pkg = (
+            await db.execute(
+                select(CreditPackage).where(CreditPackage.code == package_code)
+            )
+        ).scalar_one_or_none()
+        if not pkg:
+            logger.error(
+                f"积分充值订单档位不存在: order_id={order.order_no}, package_code={package_code}"
+            )
+            return False, f"积分充值订单档位不存在：{package_code=}"
 
     quantity = int(order.quantity or 1)
     credits_to_add = int(pkg.credits) * quantity

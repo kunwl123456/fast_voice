@@ -491,10 +491,9 @@ class Order(Base):
     )  # 订单类型
     product_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("subscription_plans.id"),
         nullable=True,
         index=True,
-    )  # 商品ID（外键：subscription_plans.id；积分充值订单为空，真实商品编码见 extra_metadata）
+    )  # 商品ID（订阅对应 subscription_plans.id，积分充值对应 credit_packages.id）
     quantity: Mapped[int] = mapped_column(Integer, default=1)  # 数量
     amount: Mapped[float] = mapped_column(Float)  # 应付金额
     currency: Mapped[str] = mapped_column(String(3), default="USD")  # 货币类型
@@ -539,5 +538,11 @@ class Order(Base):
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
     subscription_plan_config: Mapped["SubscriptionPlanConfig | None"] = relationship(
         "SubscriptionPlanConfig",
-        foreign_keys=[product_id],
+        primaryjoin="SubscriptionPlanConfig.id == foreign(Order.product_id)",
+        viewonly=True,
+    )
+    credit_package: Mapped["CreditPackage | None"] = relationship(
+        "CreditPackage",
+        primaryjoin="CreditPackage.id == foreign(Order.product_id)",
+        viewonly=True,
     )
