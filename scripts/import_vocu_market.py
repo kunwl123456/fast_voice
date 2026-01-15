@@ -91,13 +91,11 @@ async def get_or_create_user(session, author_id: str, author_name: str) -> User:
     # 先从缓存获取
     if author_id in user_cache:
         return user_cache[author_id]
-    
+
     # 查询数据库
-    result = await session.execute(
-        select(User).where(User.uuid == author_id)
-    )
+    result = await session.execute(select(User).where(User.uuid == author_id))
     user = result.scalar_one_or_none()
-    
+
     if not user:
         # 创建新用户
         # 使用 author_id 作为邮箱的一部分
@@ -111,7 +109,7 @@ async def get_or_create_user(session, author_id: str, author_name: str) -> User:
         )
         session.add(user)
         await session.flush()
-    
+
     # 缓存用户
     user_cache[author_id] = user
     return user
@@ -191,8 +189,7 @@ async def import_market_voices():
                 # 检查该用户是否已有同名语音（避免唯一约束冲突）
                 result = await session.execute(
                     select(Voice).where(
-                        Voice.owner_user_id == author_user.id,
-                        Voice.name == name
+                        Voice.owner_user_id == author_user.id, Voice.name == name
                     )
                 )
                 existing_voice = result.scalar_one_or_none()
@@ -214,7 +211,7 @@ async def import_market_voices():
 
                 description = voice_data.get("description", "")
                 tags = voice_data.get("tags", [])
-                
+
                 # 获取统计数据
                 likes_count = voice_data.get("likes", 0)
                 usage_count = voice_data.get("usage_count", 0)
@@ -272,7 +269,7 @@ async def import_market_voices():
     print(f"  ⏭️  跳过: {skipped} 个")
     print(f"  ❌ 失败: {failed} 个")
     print("=" * 70)
-    print(f"\n💡 提示: 这些语音现在可以在社区市场 (/console/voices/public) 中查询到")
+    print("\n💡 提示: 这些语音现在可以在社区市场 (/console/voices/public) 中查询到")
 
 
 def main():

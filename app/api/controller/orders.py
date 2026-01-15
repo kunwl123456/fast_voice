@@ -392,6 +392,20 @@ async def create_refund(
     if not order:
         raise NotFoundException(error=OrderError.ORDER_NOT_FOUND)
 
+    if order.status == OrderStatus.refunded:
+        raise BadRequestException(
+            error=RefundError.ORDER_ALREADY_REFUNDED,
+            message="订单已退款，无法重复退款",
+            data={"order_id": order.order_no},
+        )
+
+    if order.status == OrderStatus.refunding:
+        raise BadRequestException(
+            error=RefundError.REFUND_ALREADY_PROCESSED,
+            message="退款处理中，请等待回调确认结果",
+            data={"order_id": order.order_no},
+        )
+
     # 检查订单状态
     if order.status not in [OrderStatus.paid, OrderStatus.fulfilled]:
         raise BadRequestException(
@@ -430,8 +444,14 @@ async def create_refund(
             reason=payload.reason,
         )
 
-        # 更新订单状态
-        order.status = OrderStatus.refunded
+        # 仅记录退款申请信息，订单状态由回调确认
+        em = order.extra_metadata or {}
+        em["pre_refund_status"] = order.status.value
+        em["refund_id"] = str(refund_result.id)
+        em["refund_provider_refund_id"] = refund_result.provider_refund_id
+        em["refund_requested_at"] = tz_now().isoformat()
+        order.extra_metadata = em
+        order.status = OrderStatus.refunding
         await db.commit()
         await db.refresh(order)
 
@@ -500,6 +520,11 @@ async def handle_payment_callback(db: AsyncSession, payload: dict) -> bool:
     # 幂等：已完成/已退款不重复处理
     if order.status in [OrderStatus.fulfilled, OrderStatus.refunded]:
         logger.info(f"订单已处理过: order_no={order_no}, status={order.status.value}")
+        return True
+
+    # 退款处理中，忽略支付回调，避免状态被覆盖
+    if order.status == OrderStatus.refunding:
+        logger.info(f"订单退款中，忽略支付回调: order_no={order_no}")
         return True
 
     # 防重复履约：历史版本可能存在“paid 已落库但未履约/未标记 fulfilled”的中间态。
@@ -612,6 +637,14 @@ async def handle_refund_callback(db: AsyncSession, payload: dict) -> bool:
         logger.error(f"退款回调订单不存在: order_no={order_no} {payload=}")
         return False
 
+    # 安全校验：若已记录 payment_id，则必须与回调一致
+    if payment_id and order.payment_id and str(order.payment_id) != str(payment_id):
+        logger.error(
+            "退款回调 payment_id 不匹配: "
+            f"order_no={order_no}, order.payment_id={order.payment_id}, callback.payment_id={payment_id}"
+        )
+        return False
+
     # 幂等：已退款直接返回
     if order.status == OrderStatus.refunded:
         logger.info(f"订单已退款(幂等): order_no={order_no}")
@@ -620,6 +653,14 @@ async def handle_refund_callback(db: AsyncSession, payload: dict) -> bool:
     status_norm = str(status).lower()
     if status_norm in ["refunded", "succeeded", "completed"]:
         order.status = OrderStatus.refunded
+    elif status_norm in ["failed", "canceled", "cancelled"]:
+        # 退款失败：恢复为退款前状态（默认回退到 paid）
+        em = order.extra_metadata or {}
+        prev_status = em.get("pre_refund_status") or OrderStatus.fulfilled.value
+        try:
+            order.status = OrderStatus(prev_status)
+        except Exception:
+            order.status = OrderStatus.paid
     else:
         # 未知退款状态：不确认成功
         logger.warning(

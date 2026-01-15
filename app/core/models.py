@@ -215,7 +215,10 @@ class TTSJob(Base):
         ForeignKey("users.id"), index=True
     )  # 调用方（用户）
     voice_uuid: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("voices.uuid", ondelete="SET NULL"), index=True, nullable=True
+        String(36),
+        ForeignKey("voices.uuid", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
     )  # 使用的音色 UUID（音色删除后自动设为 NULL）
     voice_name: Mapped[str] = mapped_column(
         String(120), default=""

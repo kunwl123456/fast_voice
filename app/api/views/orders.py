@@ -101,6 +101,7 @@ async def list_orders(
     - `fulfilled`: 已完成（业务处理完成）
     - `cancelled`: 已取消
     - `expired`: 已过期
+    - `refunding`: 退款中（已提交退款申请，等待回调确认）
     - `refunded`: 已退款
     """
     result = await get_order_list(db, user, page=page, page_size=page_size)
@@ -177,7 +178,7 @@ async def create_refund(
     ### 注意事项
     - 退款金额单位为最小货币单位（如：USD为分，1美元 = 100分）
     - 退款金额不能超过订单金额
-    - 退款成功后订单状态变为 `refunded`
+    - 退款发起后订单状态变为 `refunding`，回调确认后变为 `refunded`
     - 退款操作不可逆
     - 实际到账时间取决于支付渠道（通常3-7个工作日）
     """

@@ -497,7 +497,7 @@ async def unlike_voice(
 def _delete_voice_files(v: Voice) -> None:
     """
     删除音色相关的文件（预览音频和头像）
-    
+
     ### 参数
     - v: Voice 对象
     """
@@ -551,15 +551,13 @@ async def console_delete_voice(
     v = (
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
-    
+
     # 如果没找到，尝试通过克隆任务 UUID 查找
     if not v:
         v = (
-            await db.execute(
-                select(Voice).where(Voice.clone_job_uuid == voice_uuid)
-            )
+            await db.execute(select(Voice).where(Voice.clone_job_uuid == voice_uuid))
         ).scalar_one_or_none()
-    
+
     if not v:
         raise NotFoundException(
             error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
@@ -573,20 +571,24 @@ async def console_delete_voice(
 
     # 检查是否有正在运行中的 TTS 任务（queued 或 running 状态）
     active_tts_jobs = (
-        await db.execute(
-            select(TTSJob).where(
-                TTSJob.voice_uuid == v.uuid,
-                TTSJob.status.in_([JobStatus.queued, JobStatus.running])
+        (
+            await db.execute(
+                select(TTSJob).where(
+                    TTSJob.voice_uuid == v.uuid,
+                    TTSJob.status.in_([JobStatus.queued, JobStatus.running]),
+                )
             )
         )
-    ).scalars().all()
-    
+        .scalars()
+        .all()
+    )
+
     if active_tts_jobs:
         raise BadRequestException(
             message=f"该音色正在被 {len(active_tts_jobs)} 个 TTS 任务使用（进行中），无法删除。请等待任务完成后再删除。",
             error=VoiceError.VOICE_IN_USE,
         )
-    
+
     # 注意：已完成的 TTS 任务记录会自动保留，voice_uuid 会被数据库自动设置为 NULL
     # （通过外键约束 ON DELETE SET NULL）
     # 音频文件也会保留，因为它们是用户已付费生成的资源
@@ -629,15 +631,13 @@ async def openapi_delete_voice(
     v = (
         await db.execute(select(Voice).where(Voice.uuid == voice_uuid))
     ).scalar_one_or_none()
-    
+
     # 如果没找到，尝试通过克隆任务 UUID 查找
     if not v:
         v = (
-            await db.execute(
-                select(Voice).where(Voice.clone_job_uuid == voice_uuid)
-            )
+            await db.execute(select(Voice).where(Voice.clone_job_uuid == voice_uuid))
         ).scalar_one_or_none()
-    
+
     if not v:
         raise NotFoundException(
             error=VoiceError.VOICE_NOT_FOUND, data={"voice_uuid": voice_uuid}
@@ -651,20 +651,24 @@ async def openapi_delete_voice(
 
     # 检查是否有正在运行中的 TTS 任务（queued 或 running 状态）
     active_tts_jobs = (
-        await db.execute(
-            select(TTSJob).where(
-                TTSJob.voice_uuid == v.uuid,
-                TTSJob.status.in_([JobStatus.queued, JobStatus.running])
+        (
+            await db.execute(
+                select(TTSJob).where(
+                    TTSJob.voice_uuid == v.uuid,
+                    TTSJob.status.in_([JobStatus.queued, JobStatus.running]),
+                )
             )
         )
-    ).scalars().all()
-    
+        .scalars()
+        .all()
+    )
+
     if active_tts_jobs:
         raise BadRequestException(
             message=f"该音色正在被 {len(active_tts_jobs)} 个 TTS 任务使用（进行中），无法删除。请等待任务完成后再删除。",
             error=VoiceError.VOICE_IN_USE,
         )
-    
+
     # 注意：已完成的 TTS 任务记录会自动保留，voice_uuid 会被数据库自动设置为 NULL
     # （通过外键约束 ON DELETE SET NULL）
     # 音频文件也会保留，因为它们是用户已付费生成的资源

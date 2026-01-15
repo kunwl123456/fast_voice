@@ -36,6 +36,7 @@ class OrderStatus(str, Enum):
     failed = "failed"  # 失败
     cancelled = "cancelled"  # 已取消
     expired = "expired"  # 已过期
+    refunding = "refunding"  # 退款中
     refunded = "refunded"  # 已退款
 
 

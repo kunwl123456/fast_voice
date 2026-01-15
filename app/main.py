@@ -253,7 +253,8 @@ async def init_db() -> None:
             # 使用原始 SQL 删除所有表（CASCADE），处理外键依赖
             # 这样可以删除遗留的表（如 stripe_payments）以及所有已知的表
             await conn.execute(
-                text("""
+                text(
+                    """
                 DO $$ DECLARE
                     r RECORD;
                 BEGIN
@@ -261,7 +262,8 @@ async def init_db() -> None:
                         EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
                     END LOOP;
                 END $$;
-                """)
+                """
+                )
             )
         print("所有表已清空")
 
