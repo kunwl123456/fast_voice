@@ -227,6 +227,64 @@ class PaymentGatewayClient:
             logger.error(f"[PaymentGateway] 查询支付失败: {traceback.format_exc()}")
             raise PaymentGatewayError("GET_PAYMENT_FAILED", str(e))
 
+    async def cancel_payment(
+        self,
+        merchant_order_no: str,
+        payment_id: UUID | str,
+    ) -> bool:
+        """
+        取消支付订单
+
+        Args:
+            merchant_order_no: 商户订单号
+            payment_id: 支付ID
+
+        Returns:
+            是否取消成功（code == 0）
+
+        Raises:
+            PaymentGatewayError: 取消失败时抛出
+        """
+        logger.info(
+            f"[PaymentGateway] 取消支付: order_no={merchant_order_no}, "
+            f"payment_id={payment_id}"
+        )
+
+        request_data = {
+            "merchant_order_no": merchant_order_no,
+            "payment_id": str(payment_id),
+        }
+
+        url = f"{self.base_url}/v1/payments/cancel"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(url, headers=headers, json=request_data)
+
+                if response.status_code >= 400:
+                    error_data = response.json() if response.text else {}
+                    error_message = error_data.get(
+                        "message", response.text or "Unknown error"
+                    )
+                    raise PaymentGatewayError(
+                        f"HTTP_{response.status_code}",
+                        error_message,
+                        error_data,
+                    )
+
+                response_json = response.json() if response.text else {}
+                return response_json.get("code") == 0
+        except httpx.HTTPError as e:
+            logger.error(f"[PaymentGateway] HTTP 请求失败: {traceback.format_exc()}")
+            raise PaymentGatewayError("HTTP_REQUEST_FAILED", str(e))
+        except Exception as e:
+            logger.error(f"[PaymentGateway] 取消支付失败: {traceback.format_exc()}")
+            raise PaymentGatewayError("CANCEL_PAYMENT_FAILED", str(e))
+
     async def create_refund(
         self,
         payment_id: UUID | str,

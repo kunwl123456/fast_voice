@@ -1,4 +1,4 @@
-from fastapi import Depends
+from fastapi import Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import User
@@ -83,6 +83,8 @@ from app.core.schemas import (
     response_model=Response[list[OrderListOut]],
 )
 async def list_orders(
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    page_size: int = Query(50, ge=1, le=200, description="每页数量，最大200"),
     user: User = Depends(require_console),
     db: AsyncSession = Depends(get_db),
 ):
@@ -90,7 +92,7 @@ async def list_orders(
     获取当前用户的订单列表
 
     ### 功能说明
-    - 返回最近 50 条订单记录
+    - 支持分页查询订单记录
     - 按创建时间倒序排列
 
     ### 订单状态说明
@@ -101,7 +103,7 @@ async def list_orders(
     - `expired`: 已过期
     - `refunded`: 已退款
     """
-    result = await get_order_list(db, user)
+    result = await get_order_list(db, user, page=page, page_size=page_size)
     return success_response("获取成功", [r.model_dump() for r in result])
 
 

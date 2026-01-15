@@ -11,6 +11,7 @@ from datetime import timedelta
 
 from loguru import logger
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -218,10 +219,16 @@ async def get_order_detail(
     """
     if check_creator:
         result = await db.execute(
-            select(Order).where(Order.order_no == order_no, Order.user_id == user.id)
+            select(Order)
+            .where(Order.order_no == order_no, Order.user_id == user.id)
+            .options(selectinload(Order.subscription_plan_config))
         )
     else:
-        result = await db.execute(select(Order).where(Order.order_no == order_no))
+        result = await db.execute(
+            select(Order)
+            .where(Order.order_no == order_no)
+            .options(selectinload(Order.subscription_plan_config))
+        )
 
     order = result.scalar_one_or_none()
     if not order:
@@ -253,7 +260,8 @@ async def get_order_detail(
 async def get_order_list(
     db: AsyncSession,
     user: User,
-    limit: int = 50,
+    page: int = 1,
+    page_size: int = 50,
 ) -> list[OrderListOut]:
     """
     获取订单列表
@@ -261,16 +269,19 @@ async def get_order_list(
     Args:
         db: 数据库会话
         user: 当前用户
-        limit: 返回数量限制
+        page: 页码，从1开始
+        page_size: 每页数量
 
     Returns:
         订单列表
     """
+    offset = (page - 1) * page_size
     result = await db.execute(
         select(Order)
         .where(Order.user_id == user.id)
         .order_by(Order.created_at.desc())
-        .limit(limit)
+        .offset(offset)
+        .limit(page_size)
     )
     orders = result.scalars().all()
 
@@ -317,6 +328,32 @@ async def cancel_order(
             error=OrderError.CANNOT_CANCEL_ORDER,
             message=f"订单状态为 {order.status.value}，无法取消",
             data={"current_status": order.status.value},
+        )
+
+    if not order.payment_id:
+        raise BadRequestException(
+            error=OrderError.CANNOT_CANCEL_ORDER,
+            message="订单缺少支付记录，无法取消",
+            data={"order_id": order.order_no},
+        )
+
+    try:
+        payment_client = get_payment_gateway_client()
+        cancel_success = await payment_client.cancel_payment(
+            merchant_order_no=order.order_no,
+            payment_id=order.payment_id,
+        )
+        if not cancel_success:
+            raise BadRequestException(
+                error=OrderError.CANNOT_CANCEL_ORDER,
+                message="支付网关取消失败",
+                data={"order_id": order.order_no, "payment_id": order.payment_id},
+            )
+    except PaymentGatewayError as e:
+        logger.error(f"支付网关取消订单失败: {e.code} - {e.message}")
+        raise BadRequestException(
+            error=OrderError.CANNOT_CANCEL_ORDER,
+            message=f"取消订单失败: {e.message}",
         )
 
     order.status = OrderStatus.cancelled
@@ -374,25 +411,22 @@ async def create_refund(
         payment_client = get_payment_gateway_client()
 
         # 如果指定了退款金额，需要验证
-        refund_amount_cents = None
         if payload.refund_amount is not None:
             # 验证退款金额不能超过订单金额
-            order_amount_cents = _to_cents(order.amount, order.currency)
-            if payload.refund_amount > order_amount_cents:
+            if payload.refund_amount > order.amount:
                 raise BadRequestException(
                     error=RefundError.REFUND_AMOUNT_EXCEEDS_PAYMENT,
-                    message=f"退款金额 ({payload.refund_amount}) 不能超过订单金额 ({order_amount_cents})",
+                    message=f"退款金额 ({payload.refund_amount}) 不能超过订单金额 ({order.amount})",
                     data={
                         "refund_amount": payload.refund_amount,
-                        "order_amount": order_amount_cents,
+                        "order_amount": order.amount,
                         "currency": order.currency,
                     },
                 )
-            refund_amount_cents = payload.refund_amount
 
         refund_result = await payment_client.create_refund(
             payment_id=order.payment_id,
-            refund_amount=refund_amount_cents,
+            refund_amount=payload.refund_amount,
             reason=payload.reason,
         )
 
