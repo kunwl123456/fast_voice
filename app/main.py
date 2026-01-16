@@ -18,8 +18,13 @@ from app.api.services.storage import ensure_dir
 from app.core.db import Base, engine, AsyncSessionLocal
 from app.core.middlewares import OpenAPILoggingMiddleware
 from app.core.openapi import setup_openapi, OPENAPI_DESCRIPTION
-from app.api.services.bootstrap import bootstrap_admin, bootstrap_pro
 from app.core.responses import error_response, unauthorized_response, forbidden_response
+from app.api.services.bootstrap import (
+    init_subscription_plans,
+    init_credit_packages,
+    bootstrap_admin,
+    bootstrap_pro,
+)
 
 # 从统一的路由注册中心导入所有路由
 from app.routers import (
@@ -28,7 +33,7 @@ from app.routers import (
     analytics_router,
     credits_router,
     subscription_router,
-    payment_router,
+    orders_router,
     clone_console_router,
     clone_openapi_router,
     tts_console_router,
@@ -37,8 +42,9 @@ from app.routers import (
     voices_openapi_router,
     admin_credit_router,
     admin_invite_codes_router,
-    webhook_router,
+    callback_router,
     docs_router,
+    admin_order_router,
 )
 
 # 注册各个 views 模块的路由处理器
@@ -47,11 +53,12 @@ import app.api.views.api_keys  # noqa: F401
 import app.api.views.analytics  # noqa: F401
 import app.api.views.credits  # noqa: F401
 import app.api.views.subscription  # noqa: F401
-import app.api.views.payment  # noqa: F401
+import app.api.views.orders  # noqa: F401
+import app.admin.views.orders  # noqa: F401
 import app.api.views.clone  # noqa: F401
 import app.api.views.tts  # noqa: F401
 import app.api.views.voices  # noqa: F401
-import app.api.views.webhook  # noqa: F401
+import app.api.views.callback  # noqa: F401
 import app.api.views.docs  # noqa: F401
 import app.admin.views.credit  # noqa: F401
 import app.admin.views.invite_codes  # noqa: F401
@@ -241,12 +248,13 @@ async def init_db() -> None:
     """初始化数据库：确保表存在，可选清空旧表"""
     if settings.auto_create_db:
         # 🗑️ 开发模式：每次启动都清空所有表
-        print("⚠️  清空所有表...")
+        print("清空所有表...")
         async with engine.begin() as conn:
             # 使用原始 SQL 删除所有表（CASCADE），处理外键依赖
             # 这样可以删除遗留的表（如 stripe_payments）以及所有已知的表
             await conn.execute(
-                text("""
+                text(
+                    """
                 DO $$ DECLARE
                     r RECORD;
                 BEGIN
@@ -254,18 +262,21 @@ async def init_db() -> None:
                         EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
                     END LOOP;
                 END $$;
-                """)
+                """
+                )
             )
         print("所有表已清空")
 
     # 🏗️ 确保所有表存在（如果不存在则创建）
-    print("📦 确保表结构存在...")
+    print("确保表结构存在...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("✅ 表结构已就绪")
+    print("表结构已就绪")
 
     # 👤 确保管理员账号存在
     async with AsyncSessionLocal() as db:
+        await init_subscription_plans(db)
+        await init_credit_packages(db)
         await bootstrap_admin(db)
         await bootstrap_pro(db)
 
@@ -284,10 +295,11 @@ async def _startup():
 # 注册所有路由到应用
 _app.include_router(account_router)
 _app.include_router(subscription_router)
-_app.include_router(payment_router)
+_app.include_router(orders_router)
 _app.include_router(api_keys_router)
 _app.include_router(credits_router)
 _app.include_router(admin_credit_router)
+_app.include_router(admin_order_router)
 _app.include_router(admin_invite_codes_router)
 _app.include_router(analytics_router)
 _app.include_router(voices_console_router)
@@ -296,7 +308,7 @@ _app.include_router(tts_console_router)
 _app.include_router(tts_openapi_router)
 _app.include_router(clone_console_router)
 _app.include_router(clone_openapi_router)
-_app.include_router(webhook_router)
+_app.include_router(callback_router)
 _app.include_router(docs_router)
 
 # 导出 app 实例供 uvicorn 使用

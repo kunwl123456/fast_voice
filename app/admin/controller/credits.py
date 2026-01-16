@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import User
 from app.core.error_codes import AccountError
+from app.core.constants import TxType
 from app.api.services.billing import recharge
 from app.core.exceptions import NotFoundException
 
@@ -32,6 +33,14 @@ async def recharge_user_credits(
     if not recharge_user:
         raise NotFoundException(error=AccountError.USER_NOT_FOUND)
 
-    await recharge(db=db, user_id=recharge_user.id, amount=amount, note=note)
+    await recharge(
+        db=db,
+        user_id=recharge_user.id,
+        amount=amount,
+        note=note or "管理员手动充值",
+        ref_id=str(recharge_user.uuid),
+        ref_type="admin_recharge",
+        tx_type=TxType.recharge,
+    )
 
     return {"user_id": user_uuid, "amount": amount}

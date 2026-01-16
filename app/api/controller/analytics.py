@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import ApiRequestLog, User, Voice
 from app.api.services.billing import get_or_create_account
-from app.api.controller.subscription import get_plan_config
+from app.api.services.plan_config import get_plan_config_by_id
 from app.core.schemas import (
     DashboardOut,
     RequestLogOut,
@@ -31,7 +31,7 @@ async def get_user_dashboard(db: AsyncSession, user: User) -> DashboardOut:
     - 仪表盘数据对象
     """
     acc = await get_or_create_account(db, user.id)
-    plan_config = get_plan_config(user.subscription_plan.value)
+    plan_config = await get_plan_config_by_id(db, user.subscription_plan_id)
 
     # 计算本月使用量（基于API请求日志）
     now = datetime.now(ZoneInfo("Asia/Shanghai"))

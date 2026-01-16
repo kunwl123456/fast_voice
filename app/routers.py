@@ -23,8 +23,8 @@ credits_router = APIRouter(prefix="/console/credits", tags=["积分管理"])
 # 订阅管理
 subscription_router = APIRouter(prefix="/console/subscription", tags=["订阅管理"])
 
-# 支付管理
-payment_router = APIRouter(prefix="/console/payments", tags=["支付管理"])
+# 订单管理
+orders_router = APIRouter(prefix="/console/orders", tags=["订单管理"])
 
 # 音色克隆 - Console
 clone_console_router = APIRouter(prefix="/console/clone", tags=["音色克隆"])
@@ -53,6 +53,11 @@ admin_credit_router = APIRouter(
     prefix="/admin/credits", tags=["积分管理"], dependencies=[Depends(require_admin)]
 )
 
+# 订单管理 - Admin
+admin_order_router = APIRouter(
+    prefix="/admin/orders", tags=["订单管理"], dependencies=[Depends(require_admin)]
+)
+
 # 邀请码管理 - Admin
 admin_invite_codes_router = APIRouter(
     prefix="/admin/invite-codes",
@@ -65,9 +70,9 @@ admin_invite_codes_router = APIRouter(
 docs_router = APIRouter(prefix="/docs", tags=["文档"])
 
 
-# ============= Webhook 路由 =============
-# Stripe Webhook（不需要认证）
-webhook_router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
+# ============= 回调路由 =============
+# 支付中台回调（内部接口，不需要用户认证）
+callback_router = APIRouter(prefix="/callback", tags=["回调接口"])
 
 
 # ============= 导出所有路由器 =============
@@ -78,7 +83,7 @@ __all__ = [
     "analytics_router",
     "credits_router",
     "subscription_router",
-    "payment_router",
+    "orders_router",
     "clone_console_router",
     "tts_console_router",
     "voices_console_router",
@@ -89,8 +94,9 @@ __all__ = [
     # Admin 路由
     "admin_credit_router",
     "admin_invite_codes_router",
-    # Webhook 路由
-    "webhook_router",
+    "admin_order_router",
+    # 回调路由
+    "callback_router",
     # 文档路由
     "docs_router",
 ]

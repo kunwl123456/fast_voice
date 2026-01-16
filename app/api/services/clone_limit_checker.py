@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 from app.core.models import User, Voice
-from app.core.constants import SUBSCRIPTION_PLANS
 from app.core.error_codes import CloneError
 from app.core.exceptions import BadRequestException
+from app.api.services.plan_config import get_plan_config_by_id
 
 
 async def check_clone_limit(db: AsyncSession, user: User) -> tuple[bool, int, int]:
@@ -30,7 +30,7 @@ async def check_clone_limit(db: AsyncSession, user: User) -> tuple[bool, int, in
         BadRequestException: 超过克隆位限制时抛出异常
     """
     # 获取用户的克隆位限制
-    plan_config = SUBSCRIPTION_PLANS.get(user.subscription_plan.value)
+    plan_config = await get_plan_config_by_id(db, user.subscription_plan_id)
     if not plan_config:
         logger.error(f"未找到用户 {user.email} 的计划配置")
         raise BadRequestException(
@@ -56,13 +56,21 @@ async def check_clone_limit(db: AsyncSession, user: User) -> tuple[bool, int, in
         logger.warning(
             f"用户 {user.email} 超过克隆位限制: {current_count}/{clone_limit}"
         )
+        # 获取用户的订阅计划代码
+        plan_config_for_code = await get_plan_config_by_id(
+            db, user.subscription_plan_id
+        )
+        plan_code = (
+            plan_config_for_code.plan_code if plan_config_for_code else "unknown"
+        )
+
         raise BadRequestException(
             message=f"已达到克隆位上限（{clone_limit}个），请升级订阅计划或删除旧克隆",
             error=CloneError.CLONE_LIMIT_EXCEEDED,
             data={
                 "current_count": current_count,
                 "clone_limit": clone_limit,
-                "subscription_plan": user.subscription_plan.value,
+                "subscription_plan": plan_code,
             },
         )
 
@@ -82,7 +90,7 @@ async def get_clone_usage(db: AsyncSession, user: User) -> tuple[int, int]:
     Returns:
         tuple[int, int]: (当前克隆数, 克隆上限)
     """
-    plan_config = SUBSCRIPTION_PLANS.get(user.subscription_plan.value)
+    plan_config = await get_plan_config_by_id(db, user.subscription_plan_id)
     if not plan_config:
         return 0, 0
 

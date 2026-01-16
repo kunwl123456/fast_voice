@@ -11,11 +11,13 @@ from zoneinfo import ZoneInfo
 from redis import asyncio as aioredis
 from loguru import logger
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.models import User
 from app.core.config import settings
-from app.core.constants import SUBSCRIPTION_PLANS
 from app.core.error_codes import SubscriptionError
 from app.core.exceptions import BadRequestException
+from app.api.services.plan_config import get_plan_config_by_id
 
 
 class QuotaLimiter:
@@ -63,7 +65,9 @@ class QuotaLimiter:
         return datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m")
 
     @classmethod
-    async def check_and_increment(cls, user: User) -> tuple[bool, int, int]:
+    async def check_and_increment(
+        cls, user: User, db: AsyncSession
+    ) -> tuple[bool, int, int]:
         """
         检查并递增用户的月度配额使用量
 
@@ -77,7 +81,7 @@ class QuotaLimiter:
             BadRequestException: 超过配额限制时抛出异常
         """
         # 获取用户的配额限制
-        plan_config = SUBSCRIPTION_PLANS.get(user.subscription_plan.value)
+        plan_config = await get_plan_config_by_id(db, user.subscription_plan_id)
         if not plan_config:
             # 配置缺失，默认拒绝
             raise BadRequestException(
@@ -131,17 +135,18 @@ class QuotaLimiter:
             return True, 0, quota_limit
 
     @classmethod
-    async def get_usage(cls, user: User) -> tuple[int, int]:
+    async def get_usage(cls, user: User, db: AsyncSession) -> tuple[int, int]:
         """
         获取用户当月的配额使用情况（不递增）
 
         Args:
             user: 用户对象
+            db: 数据库会话
 
         Returns:
             tuple[int, int]: (当前使用量, 配额上限)
         """
-        plan_config = SUBSCRIPTION_PLANS.get(user.subscription_plan.value)
+        plan_config = await get_plan_config_by_id(db, user.subscription_plan_id)
         if not plan_config:
             return 0, 0
 

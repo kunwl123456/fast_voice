@@ -1,89 +1,84 @@
 """
 订阅计划和系统常量配置
 统一管理所有订阅相关的配置，避免硬编码
+
+注意：订阅计划的详细配置已迁移到数据库表 subscription_plans
+此文件仅保留枚举类型和系统常量
 """
 
 from enum import Enum
-from dataclasses import dataclass
 
 
-class SubscriptionPlanType(Enum):
-    """订阅计划类型枚举"""
+class TxType(str, Enum):
+    """积分流水类型。"""
 
-    free = "free"
-    pro = "pro"
-    enterprise = "enterprise"
-
-    @classmethod
-    def values(cls) -> list[str]:
-        """获取所有订阅计划值列表"""
-        return [member.value for member in cls]
-
-    @classmethod
-    def can_upgrade_plans(cls) -> list[str]:
-        """获取可升级的订阅计划列表（不包括免费版）"""
-        return [cls.pro.value, cls.enterprise.value]
+    recharge = "recharge"  # 充值
+    consume = "consume"  # 消费（创建任务时预扣）
+    refund = "refund"  # 退款（任务失败自动回滚）
+    subscription = "subscription"  # 订阅赠送
 
 
-# ============================================================================
-# 订阅计划配置数据类
-# ============================================================================
+class JobStatus(str, Enum):
+    """异步任务状态机（TTS/克隆共用）。"""
+
+    queued = "queued"  # 已入队等待 worker
+    running = "running"  # worker 正在处理
+    succeeded = "succeeded"  # 成功产出结果
+    failed = "failed"  # 失败（并触发退款/记录错误）
 
 
-@dataclass
-class PlanConfig:
-    """订阅计划配置"""
+class OrderStatus(str, Enum):
+    """业务订单状态枚举"""
 
-    name: str  # 计划名称
-    monthly_credits: int  # 每月赠送积分
-    monthly_quota: int  # 月度请求配额
-    clone_limit: int  # 克隆位限制（-1表示无限）
-    api_access: bool  # 是否提供API访问
-    commercial_use: bool  # 是否允许商业使用
-    priority_support: bool  # 是否提供优先支持
-
-
-# ============================================================================
-# 订阅计划配置
-# ============================================================================
-
-SUBSCRIPTION_PLANS: dict[str, PlanConfig] = {
-    "free": PlanConfig(
-        name="免费版",
-        monthly_credits=5000,  # 每月5000积分
-        monthly_quota=100,  # 每月100次请求
-        clone_limit=3,  # 最多3个克隆音色
-        api_access=False,  # 无API访问
-        commercial_use=False,  # 不允许商业使用
-        priority_support=False,
-    ),
-    "pro": PlanConfig(
-        name="专业版",
-        monthly_credits=80000,  # 每月10000积分
-        monthly_quota=5000,  # 每月5000次请求
-        clone_limit=20,  # 最多20个克隆音色
-        api_access=False,  # 无API访问（仅企业版）
-        commercial_use=True,  # 允许商业使用
-        priority_support=True,
-    ),
-    "enterprise": PlanConfig(
-        name="企业版",
-        monthly_credits=150000,  # 每月100000积分
-        monthly_quota=500000,  # 每月500000次请求
-        clone_limit=-1,  # 无限克隆位
-        api_access=True,  # 提供API访问
-        commercial_use=True,  # 允许商业使用
-        priority_support=True,
-    ),
-}
+    pending = "pending"  # 待支付
+    paid = "paid"  # 已支付
+    fulfilled = "fulfilled"  # 已完成（业务处理完成，如订阅已成功）
+    failed = "failed"  # 失败
+    cancelled = "cancelled"  # 已取消
+    expired = "expired"  # 已过期
+    refunding = "refunding"  # 退款中
+    refunded = "refunded"  # 已退款
 
 
+class OrderType(str, Enum):
+    """业务订单类型枚举"""
+
+    credit_recharge = "credit_recharge"  # 积分充值
+    subscription = "subscription"  # 订阅购买
+
+
+class PaymentProvider(str, Enum):
+    """支付渠道（用于与支付网关 provider 对齐的业务枚举）。"""
+
+    stripe = "stripe"
+    alipay = "alipay"
+
+
+class Currency(str, Enum):
+    """货币类型"""
+
+    USD = "USD"  # 美元
+    CNY = "CNY"  # 人民币
+    HKD = "HKD"  # 港币
+    KRW = "KRW"  # 韩元
+    THB = "THB"  # 泰铢
+    EUR = "EUR"  # 欧元
+    GBP = "GBP"  # 英镑
+    JPY = "JPY"  # 日元
+    INR = "INR"  # 印度卢比
+
+
+# 订阅配置
 # 订阅周期：每月天数
 SUBSCRIPTION_DAYS_PER_MONTH = 30
-
 # 订阅月数限制
 SUBSCRIPTION_MIN_MONTHS = 1
 SUBSCRIPTION_MAX_MONTHS = 12
-
 # 默认订阅计划
-DEFAULT_SUBSCRIPTION_PLAN: str = SubscriptionPlanType.free.value
+DEFAULT_SUBSCRIPTION_PLAN: str = "free"
+# 可升级的订阅计划
+CAN_UPGRADE_PLANS = ["pro", "enterprise"]
+
+# 订单配置
+# 订单过期时间（分钟）
+ORDER_EXPIRE_MINUTES = 30

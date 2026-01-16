@@ -4,7 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.models import CreditAccount, CreditTransaction, TxType
+from app.core.constants import TxType
+from app.core.models import CreditAccount, CreditTransaction
 
 
 def utf8_bytes(text: str) -> int:
@@ -132,7 +133,10 @@ async def recharge(
     user_id: int,
     amount: int,
     note: str,
-    ref_id: str = "",
+    ref_id: str,
+    ref_type: str,
+    tx_type: TxType,
+    commit: bool = True,
 ) -> None:
     """
     充值
@@ -144,15 +148,22 @@ async def recharge(
 
     # 增加余额
     acc.balance += amount
+    db.add(acc)
 
-    # 记录充值流水
+    # 记录积分流水
     db.add(
         CreditTransaction(
             account_id=acc.id,
-            tx_type=TxType.recharge,
+            tx_type=tx_type,
             amount=amount,
-            ref_type="recharge",
+            ref_type=ref_type,
             ref_id=str(ref_id),
             note=note,
         )
     )
+    # 事务边界由调用方控制：默认兼容旧行为直接提交；
+    # 在“回调履约”等需要原子性的场景，可传 commit=False 由外层统一 commit。
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()

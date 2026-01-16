@@ -146,7 +146,7 @@ async def require_openapi(
         )
 
     # 检验 OpenAPI 请求次数配额
-    await QuotaLimiter.check_and_increment(user)
+    await QuotaLimiter.check_and_increment(user, db)
 
     request.state.current_user = user
     return OpenAPIPrincipal(user=user, api_key=api_key_value)

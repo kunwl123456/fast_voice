@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.models import ApiKey, User
 from app.core.error_codes import ApiKeyError
 from app.core.security import generate_api_key
-from app.core.constants import SubscriptionPlanType
 from app.core.schemas import ApiKeyListItem, ApiKeyOut
+from app.api.services.plan_config import get_plan_config_by_id
 from app.core.exceptions import NotFoundException, PermissionException
 
 
@@ -172,15 +172,17 @@ async def rotate_user_api_key(
     return ApiKeyOut(api_key=api_key_value, expires_at=expires_at)
 
 
-def check_enterprise_permission(user: User) -> None:
+async def check_enterprise_permission(db: AsyncSession, user: User) -> None:
     """
     检查用户是否有企业版权限
 
     ### 参数
+    - db: 数据库会话
     - user: 用户对象
 
     ### 异常
     - PermissionException: 用户没有企业版权限
     """
-    if user.subscription_plan.value != SubscriptionPlanType.enterprise.value:
+    plan_config = await get_plan_config_by_id(db, user.subscription_plan_id)
+    if not plan_config or plan_config.plan_code != "enterprise":
         raise PermissionException(error=ApiKeyError.API_ACCESS_DENIED)

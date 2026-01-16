@@ -12,9 +12,10 @@ from app.api.services.kv import KV
 from app.core.config import settings
 from app.tasks.jobs import run_clone_job
 from app.core.error_codes import CloneError
+from app.core.models import CloneJob, User
+from app.core.constants import JobStatus
 from app.core.responses import success_response
 from app.api.services.voice_tags import validate_tags
-from app.core.models import CloneJob, JobStatus, User
 from app.routers import clone_console_router as console_router
 from app.routers import clone_openapi_router as openapi_router
 from app.api.services.storage import job_dir, to_public_file_url

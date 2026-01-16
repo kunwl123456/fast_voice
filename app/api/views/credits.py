@@ -9,10 +9,19 @@ from app.core.models import User
 from app.routers import credits_router as router
 from app.core.responses import success_response
 from app.core.deps import get_db, require_console
-from app.core.schemas import Response, CreditAccountOut, CreditTxOut
+from app.core.schemas import (
+    Response,
+    CreditAccountOut,
+    CreditTxOut,
+    CreditPackageOut,
+    BuyCreditIn,
+    BuyCreditOut,
+)
 from app.api.controller.credits import (
     get_user_credit_balance,
     get_user_credit_transactions,
+    list_credit_packages,
+    buy_credits,
 )
 
 
@@ -76,3 +85,27 @@ async def credit_transactions(
     transactions_list = await get_user_credit_transactions(db, user)
     transactions_data = [t.model_dump() for t in transactions_list]
     return success_response("获取成功", transactions_data)
+
+
+@router.get(
+    "/packages",
+    summary="获取积分充值档位",
+    response_model=Response[list[CreditPackageOut]],
+)
+async def get_credit_packages(db: AsyncSession = Depends(get_db)):
+    packages = await list_credit_packages(db)
+    return success_response("获取成功", [p.model_dump() for p in packages])
+
+
+@router.post(
+    "/buy",
+    summary="购买积分（创建支付订单）",
+    response_model=Response[BuyCreditOut],
+)
+async def buy_credit_package(
+    payload: BuyCreditIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_console),
+):
+    result = await buy_credits(db, user, payload)
+    return success_response("创建订单成功", result.model_dump())

@@ -18,8 +18,9 @@ sys.path.insert(0, "/app")
 # 数据库连接会自动从 docker-compose.yml 中的环境变量读取
 
 from sqlalchemy import select
+from app.core.constants import JobStatus
 from app.core.db import AsyncSessionLocal
-from app.core.models import User, Voice, CloneJob, JobStatus
+from app.core.models import User, Voice, CloneJob
 
 # 配置
 ADMIN_EMAIL = "admin@autogame.ai"
@@ -170,7 +171,7 @@ async def import_voices():
                 avatar_url = voice_data.get("avatar_url", "")
                 description = voice_data.get("description", "")
                 tags = voice_data.get("tags", [])
-                
+
                 # description 现在支持多语言格式（简体|繁体|日语|韩语|英语）
                 # 数据库字段已扩展到 VARCHAR(2000) 以支持完整的多语言内容
 
@@ -211,7 +212,7 @@ async def import_voices():
                 )
                 session.add(voice)
                 await session.flush()
-                
+
                 # 提交事务
                 await session.commit()
 

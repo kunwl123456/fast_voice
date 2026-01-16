@@ -8,13 +8,14 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from loguru import logger
 
-from app.core.models import User, CreditTransaction, TxType
-from app.core.constants import SUBSCRIPTION_PLANS, SubscriptionPlanType
+from app.core.constants import TxType
+from app.core.models import User, CreditTransaction
 from app.api.services.billing import get_or_create_account
+from app.api.services.plan_config import get_plan_config_by_id
 
 
 async def renew_monthly_credits_for_user(db: AsyncSession, user: User) -> int:
@@ -28,8 +29,11 @@ async def renew_monthly_credits_for_user(db: AsyncSession, user: User) -> int:
     Returns:
         int: 本次续赠的积分数量（0表示无需续赠）
     """
+    # 获取计划配置
+    plan_config = await get_plan_config_by_id(db, user.subscription_plan_id)
+
     # 免费用户不续赠（注册时已给初始积分）
-    if user.subscription_plan == SubscriptionPlanType.free:
+    if not plan_config or plan_config.plan_code == "free":
         return 0
 
     # 检查订阅是否有效
@@ -38,8 +42,6 @@ async def renew_monthly_credits_for_user(db: AsyncSession, user: User) -> int:
         logger.info(f"用户 {user.email} 订阅已过期，跳过续赠")
         return 0
 
-    # 获取计划配置
-    plan_config = SUBSCRIPTION_PLANS.get(user.subscription_plan.value)
     if not plan_config:
         logger.warning(f"未找到用户 {user.email} 的计划配置")
         return 0
@@ -58,7 +60,7 @@ async def renew_monthly_credits_for_user(db: AsyncSession, user: User) -> int:
         tx_type=TxType.subscription,
         amount=credits_to_add,
         ref_type="monthly_renewal",
-        ref_id=f"{user.subscription_plan.value}_{now.strftime('%Y%m')}",
+        ref_id=f"{plan_config.plan_code}_{now.strftime('%Y%m')}",
         note=f"月度自动续赠积分（{plan_config.name}）",
     )
     db.add(tx)
@@ -81,13 +83,13 @@ async def renew_monthly_credits_batch(db: AsyncSession) -> dict:
     """
     logger.info("开始执行月度积分续赠任务")
 
-    # 查询所有付费且订阅未过期的用户
+    # 查询所有订阅未过期的用户（后续会根据计划配置判断是否为付费用户）
     now = datetime.now(ZoneInfo("Asia/Shanghai"))
     users = (
         (
             await db.execute(
                 select(User).where(
-                    User.subscription_plan != SubscriptionPlanType.free,
+                    User.subscription_plan_id.isnot(None),
                     User.subscription_ends_at > now,
                 )
             )

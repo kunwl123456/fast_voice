@@ -12,12 +12,13 @@ from fastapi import Depends, Header, Request, Query
 from app.api.services.kv import KV
 from app.core.config import settings
 from app.tasks.jobs import run_tts_job
+from app.core.constants import JobStatus
 from app.core.responses import success_response
 from app.api.services.redis_pubsub import RedisPubSub
 from app.api.services.storage import to_public_file_url
 from app.routers import tts_console_router as console_router
 from app.routers import tts_openapi_router as openapi_router
-from app.core.models import JobStatus, TTSJob, User, CloneJob, Voice
+from app.core.models import User, TTSJob, CloneJob, Voice
 from app.core.schemas import (
     JobOut,
     TTSJobOut,

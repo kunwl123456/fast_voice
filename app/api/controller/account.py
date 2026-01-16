@@ -12,7 +12,8 @@ from app.core.config import settings
 from app.core.schemas import MeOut, LoginOut
 from app.api.services.account import update_user_field
 from app.api.services.billing import get_or_create_account
-from app.core.constants import DEFAULT_SUBSCRIPTION_PLAN, SUBSCRIPTION_PLANS
+from app.api.services.plan_config import query_plan_config
+from app.core.constants import TxType, DEFAULT_SUBSCRIPTION_PLAN
 from app.core.security import create_access_token, hash_password, verify_password
 from app.api.services.storage import (
     data_dir,
@@ -29,8 +30,6 @@ from app.core.exceptions import (
 from app.core.models import (
     CreditAccount,
     CreditTransaction,
-    SubscriptionPlan,
-    TxType,
     User,
 )
 
@@ -53,13 +52,23 @@ async def build_user_response(db: AsyncSession, user: User) -> MeOut:
     """
     acc = await get_or_create_account(db, user.id)
 
+    # 获取用户的订阅计划
+    from app.api.services.plan_config import get_plan_config_by_id
+
+    plan_config = (
+        await get_plan_config_by_id(db, user.subscription_plan_id)
+        if user.subscription_plan_id
+        else None
+    )
+    plan_code = plan_config.plan_code if plan_config else DEFAULT_SUBSCRIPTION_PLAN
+
     return MeOut(
         id=user.uuid,
         email=user.email,
         display_name=user.display_name,
         avatar_url=user.avatar_url,
         is_admin=user.is_admin,
-        subscription_plan=user.subscription_plan.value,
+        subscription_plan=plan_code,
         subscription_ends_at=user.subscription_ends_at,
         credit_balance=acc.balance,
     )
@@ -72,13 +81,24 @@ async def build_login_response(
     构建登录响应对象
     """
     acc = await get_or_create_account(db, user.id)
+
+    # 获取用户的订阅计划
+    from app.api.services.plan_config import get_plan_config_by_id
+
+    plan_config = (
+        await get_plan_config_by_id(db, user.subscription_plan_id)
+        if user.subscription_plan_id
+        else None
+    )
+    plan_code = plan_config.plan_code if plan_config else DEFAULT_SUBSCRIPTION_PLAN
+
     return LoginOut(
         id=user.uuid,
         email=user.email,
         display_name=user.display_name,
         avatar_url=user.avatar_url,
         is_admin=user.is_admin,
-        subscription_plan=user.subscription_plan.value,
+        subscription_plan=plan_code,
         subscription_ends_at=user.subscription_ends_at,
         credit_balance=acc.balance,
         access_token=access_token,
@@ -175,12 +195,15 @@ async def register_user(
     if existed:
         raise ConflictException(error=AccountError.EMAIL_EXISTS)
 
+    # 获取默认订阅计划的ID
+    default_plan = await query_plan_config(db, DEFAULT_SUBSCRIPTION_PLAN)
+
     # 创建用户
     u = User(
         email=email,
         password_hash=hash_password(password),
         display_name=display_name,
-        subscription_plan=SubscriptionPlan(DEFAULT_SUBSCRIPTION_PLAN),
+        subscription_plan_id=default_plan.id if default_plan else None,
     )
     db.add(u)
     await db.flush()
@@ -198,7 +221,8 @@ async def register_user(
         db.add(invite)
 
     # 创建积分账户并赠送免费版初始积分
-    amount = SUBSCRIPTION_PLANS[DEFAULT_SUBSCRIPTION_PLAN].monthly_credits
+    plan_config = await query_plan_config(db, DEFAULT_SUBSCRIPTION_PLAN)
+    amount = plan_config.monthly_credits if plan_config else 1000  # 默认 1000
     acc = CreditAccount(user_id=u.id, balance=amount)
     db.add(acc)
     await db.flush()
