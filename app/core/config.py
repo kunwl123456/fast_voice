@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # 每字符消耗的积分数
     credit_price_per_utf8_byte: int = 1
     # TTS的最大字符数限制
-    max_text_utf8_bytes: int = 4000
+    max_text_utf8_bytes: int = 6000
 
     # 音频文件上传限制
     max_audio_file_size_mb: int = 32  # 最大 32MB
