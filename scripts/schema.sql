@@ -86,10 +86,15 @@ CREATE TABLE voices (
     uuid VARCHAR(36) NOT NULL UNIQUE,
     owner_user_id INTEGER NOT NULL REFERENCES users(id),
     name VARCHAR(120) NOT NULL,
-    description VARCHAR(255) NOT NULL DEFAULT '',
+    avatar_url VARCHAR(512) NOT NULL DEFAULT '',
+    description VARCHAR(2000) NOT NULL DEFAULT '',
+    tags JSONB NOT NULL DEFAULT '[]'::jsonb,
     is_public BOOLEAN NOT NULL DEFAULT FALSE,
     preview_audio_path VARCHAR(255) NOT NULL DEFAULT '',
     clone_job_uuid VARCHAR(36) NOT NULL DEFAULT '',
+    likes_count INTEGER NOT NULL DEFAULT 0,
+    generated_chars_count INTEGER NOT NULL DEFAULT 0,
+    usage_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Shanghai')
 );
 
@@ -98,6 +103,8 @@ CREATE INDEX idx_voices_uuid ON voices(uuid);
 CREATE INDEX idx_voices_owner_user_id ON voices(owner_user_id);
 CREATE INDEX idx_voices_is_public ON voices(is_public);
 CREATE INDEX idx_voices_clone_job_uuid ON voices(clone_job_uuid);
+CREATE INDEX idx_voices_likes_count ON voices(likes_count);
+CREATE INDEX idx_voices_usage_count ON voices(usage_count);
 
 -- 表：tts_jobs
 -- 用途：TTS 合成任务（异步队列）。创建时预扣积分，失败自动退款
@@ -136,7 +143,11 @@ CREATE TABLE clone_jobs (
     uuid VARCHAR(36) NOT NULL UNIQUE,
     user_id INTEGER NOT NULL REFERENCES users(id),
     voice_name VARCHAR(120) NOT NULL,
+    avatar_url VARCHAR(512) NOT NULL DEFAULT '',
+    description VARCHAR(2000) NOT NULL DEFAULT '',
+    tags JSONB NOT NULL DEFAULT '[]'::jsonb,
     is_public BOOLEAN NOT NULL DEFAULT FALSE,
+    remove_background_noise BOOLEAN NOT NULL DEFAULT FALSE,
     status job_status NOT NULL DEFAULT 'queued',
     error VARCHAR(255) NOT NULL DEFAULT '',
     dataset_dir VARCHAR(255) NOT NULL DEFAULT '',
@@ -211,9 +222,14 @@ COMMENT ON COLUMN credit_transactions.note IS '备注';
 
 COMMENT ON COLUMN voices.owner_user_id IS '拥有者（用户）';
 COMMENT ON COLUMN voices.name IS '音色名称';
-COMMENT ON COLUMN voices.description IS '描述';
+COMMENT ON COLUMN voices.avatar_url IS '音色头像 URL';
+COMMENT ON COLUMN voices.description IS '音色描述（多语言格式：简体|繁体|日语|韩语|英语）';
+COMMENT ON COLUMN voices.tags IS '标签列表（JSONB 数组）';
 COMMENT ON COLUMN voices.is_public IS '是否公开';
 COMMENT ON COLUMN voices.preview_audio_path IS '本地预览音频路径';
+COMMENT ON COLUMN voices.likes_count IS '点赞数';
+COMMENT ON COLUMN voices.generated_chars_count IS '生成字符数';
+COMMENT ON COLUMN voices.usage_count IS '使用次数';
 
 COMMENT ON COLUMN tts_jobs.user_id IS '调用方（用户）';
 COMMENT ON COLUMN tts_jobs.voice_id IS '使用的音色';
@@ -227,10 +243,14 @@ COMMENT ON COLUMN tts_jobs.output_audio_path IS '产出音频本地路径';
 
 COMMENT ON COLUMN clone_jobs.user_id IS '调用方（用户）';
 COMMENT ON COLUMN clone_jobs.voice_name IS '目标音色名';
+COMMENT ON COLUMN clone_jobs.avatar_url IS '音色头像 URL';
+COMMENT ON COLUMN clone_jobs.description IS '音色描述（多语言格式：简体|繁体|日语|韩语|英语）';
+COMMENT ON COLUMN clone_jobs.tags IS '标签列表（JSONB 数组）';
 COMMENT ON COLUMN clone_jobs.is_public IS '产出音色是否公开';
+COMMENT ON COLUMN clone_jobs.remove_background_noise IS '是否去除背景噪音';
 COMMENT ON COLUMN clone_jobs.status IS '状态：queued(已入队), running(处理中), succeeded(成功), failed(失败)';
 COMMENT ON COLUMN clone_jobs.dataset_dir IS '本地数据集目录（上传文件落这里）';
-COMMENT ON COLUMN clone_jobs.result_voice_id IS '成功后关联 voices.id';
+COMMENT ON COLUMN clone_jobs.result_voice_uuid IS '成功后生成的音色 UUID';
 
 COMMENT ON COLUMN api_request_logs.user_id IS '调用用户';
 COMMENT ON COLUMN api_request_logs.api_key_id IS '使用的API Key';

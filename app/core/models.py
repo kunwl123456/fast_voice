@@ -172,7 +172,9 @@ class Voice(Base):
     )  # 拥有者（用户）
     name: Mapped[str] = mapped_column(String(120))  # 音色名称
     avatar_url: Mapped[str] = mapped_column(String(512), default="")  # 音色头像
-    description: Mapped[str] = mapped_column(String(500), default="")  # 描述
+    description: Mapped[str] = mapped_column(
+        String(2000), default=""
+    )  # 描述（多语言格式：简体|繁体|日语|韩语|英语）
     tags: Mapped[list[str]] = mapped_column(
         JSONB, default=list
     )  # 标签列表（使用JSONB支持高效查询）
@@ -270,7 +272,9 @@ class CloneJob(Base):
     )  # 调用方（用户）
     voice_name: Mapped[str] = mapped_column(String(120))  # 目标音色名
     avatar_url: Mapped[str] = mapped_column(String(512), default="")  # 音频特征头像
-    description: Mapped[str] = mapped_column(String(500), default="")  # 音频特征描述
+    description: Mapped[str] = mapped_column(
+        String(2000), default=""
+    )  # 音频特征描述（多语言格式：简体|繁体|日语|韩语|英语）
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)  # 标签列表
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)  # 产出音色是否公开
     remove_background_noise: Mapped[bool] = mapped_column(

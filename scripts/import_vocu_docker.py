@@ -172,6 +172,9 @@ async def import_voices():
                 description = voice_data.get("description", "")
                 tags = voice_data.get("tags", [])
 
+                # description 现在支持多语言格式（简体|繁体|日语|韩语|英语）
+                # 数据库字段已扩展到 VARCHAR(2000) 以支持完整的多语言内容
+
                 # 先创建 CloneJob 记录（TTS 接口需要查找这个）
                 clone_job = CloneJob(
                     uuid=original_id,
@@ -189,6 +192,7 @@ async def import_voices():
                     external_request_id="",
                 )
                 session.add(clone_job)
+                await session.flush()
 
                 # 创建Voice记录
                 # uuid 和 clone_job_uuid 都使用原数据的 id
@@ -207,8 +211,9 @@ async def import_voices():
                     usage_count=voice_data.get("usage_count", 0),
                 )
                 session.add(voice)
-
                 await session.flush()
+
+                # 提交事务
                 await session.commit()
 
                 imported += 1
