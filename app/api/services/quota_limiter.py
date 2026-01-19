@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import calendar
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -50,19 +51,71 @@ class QuotaLimiter:
         return cls._redis_client
 
     @classmethod
-    def _get_quota_key(cls, user_id: int, month: str) -> str:
+    def _get_cycle_key(cls, user: User) -> str:
+        """
+        计算配额周期键
+        - 免费用户/无订阅截止时间：按自然月 (YYYYMM)
+        - 付费用户：按订阅日 (Anniversary) (YYYYMMDD)
+          计算当前处于哪一个月度周期，返回该周期的起始日期
+        """
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+
+        # 免费用户或无截止时间，回退到自然月
+        if not user.subscription_ends_at:
+            return now.strftime("%Y%m")
+
+        # 订阅日逻辑
+        anchor_day = user.subscription_ends_at.day
+
+        # 尝试构建本月的订阅日
+        try:
+            # 处理月末日期 (e.g. 31号) 在小月的情况
+            # 策略：如果本月没有这一天，就取本月最后一天
+            _, last_day = calendar.monthrange(now.year, now.month)
+            day = min(anchor_day, last_day)
+            this_month_anniversary = now.replace(
+                day=day, hour=0, minute=0, second=0, microsecond=0
+            )
+        except ValueError:
+            # 防御性代码，理论上上面 monthrange 已处理
+            return now.strftime("%Y%m")
+
+        if now >= this_month_anniversary:
+            # 当前时间已过本月订阅日，说明周期开始于本月
+            return this_month_anniversary.strftime("%Y%m%d")
+        else:
+            # 当前时间未到本月订阅日，说明周期开始于上月
+            # 计算上个月的年份和月份
+            if now.month == 1:
+                prev_year = now.year - 1
+                prev_month = 12
+            else:
+                prev_year = now.year
+                prev_month = now.month - 1
+
+            _, last_day_prev = calendar.monthrange(prev_year, prev_month)
+            day_prev = min(anchor_day, last_day_prev)
+            prev_month_anniversary = now.replace(
+                year=prev_year,
+                month=prev_month,
+                day=day_prev,
+                hour=0,
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+
+            return prev_month_anniversary.strftime("%Y%m%d")
+
+    @classmethod
+    def _get_quota_key(cls, user_id: int, cycle_key: str) -> str:
         """
         生成配额计数器的Redis键
 
-        格式: quota:{user_id}:{YYYYMM}
-        例如: quota:123:202412
+        格式: quota:{user_id}:{cycle_key}
+        例如: quota:123:20240115 (付费用户) 或 quota:123:202401 (免费用户)
         """
-        return f"quota:{user_id}:{month}"
-
-    @classmethod
-    def _get_current_month(cls) -> str:
-        """获取当前月份标识 (YYYYMM)"""
-        return datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m")
+        return f"quota:{user_id}:{cycle_key}"
 
     @classmethod
     async def check_and_increment(
@@ -97,9 +150,9 @@ class QuotaLimiter:
             logger.warning(f"Redis不可用，配额检查降级通过 (user={user.email})")
             return True, 0, quota_limit
 
-        # 生成本月的配额键
-        month = cls._get_current_month()
-        key = cls._get_quota_key(user.id, month)
+        # 生成当前周期的配额键
+        cycle_key = cls._get_cycle_key(user)
+        key = cls._get_quota_key(user.id, cycle_key)
 
         try:
             # 原子操作：获取当前值并递增
@@ -113,7 +166,7 @@ class QuotaLimiter:
             if current_usage > quota_limit:
                 # 已超过配额，拒绝请求
                 logger.warning(
-                    f"用户 {user.email} 超过月度配额: " f"{current_usage}/{quota_limit}"
+                    f"用户 {user.email} 超过月度配额: {current_usage}/{quota_limit} (cycle={cycle_key})"
                 )
                 raise BadRequestException(
                     message=f"已超过月度请求配额（{quota_limit}次/月）",
@@ -121,7 +174,7 @@ class QuotaLimiter:
                     data={
                         "current_usage": current_usage - 1,  # 减去本次
                         "quota_limit": quota_limit,
-                        "month": month,
+                        "cycle": cycle_key,
                     },
                 )
 
@@ -156,8 +209,8 @@ class QuotaLimiter:
         if client is None:
             return 0, quota_limit
 
-        month = cls._get_current_month()
-        key = cls._get_quota_key(user.id, month)
+        cycle_key = cls._get_cycle_key(user)
+        key = cls._get_quota_key(user.id, cycle_key)
 
         try:
             usage = await client.get(key)
@@ -168,13 +221,13 @@ class QuotaLimiter:
             return 0, quota_limit
 
     @classmethod
-    async def reset_user_quota(cls, user_id: int, month: str | None = None) -> bool:
+    async def reset_user_quota(cls, user_id: int, cycle_key: str | None = None) -> bool:
         """
         重置用户的月度配额（管理员功能）
 
         Args:
             user_id: 用户ID
-            month: 月份标识(YYYYMM)，为None时重置当前月份
+            cycle_key: 周期标识(YYYYMM 或 YYYYMMDD)，为None时重置当前自然月（仅供兼容，建议明确传入）
 
         Returns:
             bool: 是否重置成功
@@ -183,14 +236,15 @@ class QuotaLimiter:
         if client is None:
             return False
 
-        if month is None:
-            month = cls._get_current_month()
+        if cycle_key is None:
+            # 默认重置自然月（兼容旧行为）
+            cycle_key = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m")
 
-        key = cls._get_quota_key(user_id, month)
+        key = f"quota:{user_id}:{cycle_key}"
 
         try:
             await client.delete(key)
-            logger.info(f"已重置用户 {user_id} 的配额计数器 ({month})")
+            logger.info(f"已重置用户 {user_id} 的配额计数器 ({cycle_key})")
             return True
         except Exception as e:
             logger.error(f"重置配额失败: {e}")

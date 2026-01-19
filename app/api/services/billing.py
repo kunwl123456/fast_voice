@@ -127,6 +127,54 @@ async def refund(
     )
 
 
+async def revoke_credits(
+    *,
+    db: AsyncSession,
+    user_id: int,
+    amount: int,
+    ref_type: str,
+    ref_id: str,
+    note: str = "",
+) -> None:
+    """
+    撤销/扣除积分（用于退款回滚）：
+    - 强制扣除，允许余额为负
+    - 记录 consume 类型的流水（或新增 revoke 类型，暂时复用 consume 或 refund 负数）
+
+    Args:
+        db: 数据库会话
+        user_id: 用户ID
+        amount: 扣除数量（正整数）
+    """
+    if amount <= 0:
+        return
+
+    # 🔒 使用行锁获取账户
+    acc = await get_or_create_account(db, user_id, lock=True)
+
+    # 强制扣减余额
+    acc.balance -= amount
+    db.add(acc)
+
+    # 记录流水 (使用 refund 类型但金额为负，或者 consume？通常退款回滚视为一种支出/冲正)
+    # 这里使用 refund 类型但金额为负，表示"退款撤销/权益回收"
+    # 或者使用 consume，但 consume 通常指消费。
+    # 为了区分用户主动消费和系统扣回，建议复用 refund (负数) 或新增类型。
+    # 现有的 TxType 可能有限。查看 constants.py。
+    # 假设使用 refund 负数表示"退款扣回"
+
+    db.add(
+        CreditTransaction(
+            account_id=acc.id,
+            tx_type=TxType.refund,
+            amount=-amount,
+            ref_type=ref_type,
+            ref_id=str(ref_id),
+            note=note,
+        )
+    )
+
+
 async def recharge(
     *,
     db: AsyncSession,

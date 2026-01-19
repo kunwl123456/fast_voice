@@ -185,6 +185,39 @@ async def upgrade_user_subscription(
             data={"valid_plans": CAN_UPGRADE_PLANS},
         )
 
+    # 策略限制：Enterprise 仅支持后台开通
+    if plan == "enterprise":
+        raise BadRequestException(
+            message="企业版订阅请联系商务或管理员开通",
+            error=SubscriptionError.INVALID_PLAN,
+        )
+
+    # 获取当前用户的订阅计划配置
+    current_plan_config = await get_plan_config_by_id(db, user.subscription_plan_id)
+    current_plan_code = current_plan_config.plan_code if current_plan_config else "free"
+
+    # 策略限制：Free -> Pro 升级限制
+    if current_plan_code == "free" and plan == "pro":
+        if months != 1:
+            raise BadRequestException(
+                message="首次升级专业版仅支持订阅 1 个月",
+                error=SubscriptionError.INVALID_DURATION,
+                data={"allowed_months": 1},
+            )
+
+    # 策略限制：不允许自助降级（如 Pro -> Free 或 Enterprise -> Pro）
+    # 注意：这里简单通过 plan_code 比较可能不准确，理想情况应比较 price 或 level
+    # 假设 level: free < pro < enterprise
+    plan_levels = {"free": 0, "pro": 1, "enterprise": 2}
+    current_level = plan_levels.get(current_plan_code, 0)
+    target_level = plan_levels.get(plan, 0)
+
+    if target_level < current_level:
+        raise BadRequestException(
+            message="不支持自助降级订阅，请等待当前订阅过期",
+            error=SubscriptionError.INVALID_PLAN,
+        )
+
     all_pay_types = list(PaymentProvider.__members__.keys())
     if pay_type not in all_pay_types:
         raise BadRequestException(
