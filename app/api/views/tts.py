@@ -57,6 +57,7 @@ def _tts_out(job: TTSJob) -> TTSJobOut:
         cost_credits=job.cost_credits,
         tags=job.tags or [],
         speed_factor=job.speed_factor,
+        volume=job.volume,
         temperature=job.temperature,
         top_k=job.top_k,
         top_p=job.top_p,
@@ -142,6 +143,7 @@ async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TT
             )
 
     speed_factor = payload.speed_factor if payload.speed_factor is not None else 1.0
+    volume = payload.volume if payload.volume is not None else 1.0
     temperature = payload.temperature if payload.temperature is not None else 1.0
     top_k = payload.top_k if payload.top_k is not None else 5
     top_p = payload.top_p if payload.top_p is not None else 1.0
@@ -156,6 +158,7 @@ async def _create_job(db: AsyncSession, user_id: int, payload: TTSCreatIn) -> TT
         cost_credits=cost,
         tags=voice.tags or [],  # 使用音色的标签
         speed_factor=speed_factor,
+        volume=volume,
         temperature=temperature,
         top_k=top_k,
         top_p=top_p,

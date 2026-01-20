@@ -232,6 +232,7 @@ class TTSJob(Base):
     cost_credits: Mapped[int] = mapped_column(Integer)  # 扣费积分（= bytes * price）
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)  # 任务标签列表
     speed_factor: Mapped[float] = mapped_column(Float, default=1.0)  # 语速
+    volume: Mapped[float] = mapped_column(Float, default=1.0)  # 音量
     temperature: Mapped[float] = mapped_column(Float, default=1.0)  # 采样温度
     top_k: Mapped[int] = mapped_column(Integer, default=5)  # 采样 top_k
     top_p: Mapped[float] = mapped_column(Float, default=1.0)  # 采样 top_p

@@ -42,3 +42,4 @@ migrations/
 /vocu_data
 docker-compose.yml
 run.py
+/training_data_converted

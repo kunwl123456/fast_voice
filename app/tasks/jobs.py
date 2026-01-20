@@ -80,6 +80,7 @@ def run_tts_job(job_id: int) -> None:
         voice_uuid = job.voice_uuid
         job_text = job.text
         speed_factor = job.speed_factor or 1.0
+        volume = job.volume or 1.0
         temperature = job.temperature or 1.0
         top_k = job.top_k or 5
         top_p = job.top_p or 1.0
@@ -116,6 +117,7 @@ def run_tts_job(job_id: int) -> None:
                 "text": job_text,
                 "ids": [clone_uuid],
                 "speed_factor": speed_factor,
+                "volume": volume,
                 "temperature": temperature,
                 "top_k": top_k,
                 "top_p": top_p,

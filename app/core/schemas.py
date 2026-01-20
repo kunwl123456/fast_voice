@@ -385,6 +385,9 @@ class TTSCreatIn(BaseModel):
     speed_factor: float | None = Field(
         default=None, description="语速，可选；未提供则使用默认值 1.0"
     )
+    volume: float | None = Field(
+        default=None, description="音量，可选；未提供则使用默认值 1.0"
+    )
     temperature: float | None = Field(
         default=None, description="采样温度，可选；未提供则使用默认值 1.0"
     )
@@ -409,6 +412,7 @@ class TTSJobOut(JobOut):
     cost_credits: int = Field(description="消耗的积分数")
     tags: list[str] = Field(description="音色标签")
     speed_factor: float = Field(description="语速系数")
+    volume: float = Field(description="音量")
     temperature: float = Field(description="采样温度")
     top_k: int = Field(description="采样 top_k 参数")
     top_p: float = Field(description="采样 top_p 参数")

@@ -41,12 +41,13 @@ def copy_avatar_files():
     # 确保目标目录存在
     dest_avatars_dir.mkdir(parents=True, exist_ok=True)
 
-    # 复制所有头像文件
+    # 复制所有头像文件（支持 .webp 和 .jpg 格式）
     copied = 0
-    for avatar_file in src_avatars_dir.glob("*.webp"):
-        dest_file = dest_avatars_dir / avatar_file.name
-        shutil.copy2(avatar_file, dest_file)
-        copied += 1
+    for pattern in ["*.webp", "*.jpg", "*.png"]:
+        for avatar_file in src_avatars_dir.glob(pattern):
+            dest_file = dest_avatars_dir / avatar_file.name
+            shutil.copy2(avatar_file, dest_file)
+            copied += 1
 
     return copied
 
@@ -62,21 +63,39 @@ def copy_preview_audio_files(voices_data):
     copied = 0
     for voice_data in voices_data:
         original_id = voice_data.get("id")
-        avatar_url = voice_data.get("avatar_url", "")
+        name = voice_data.get("name")
+        preview_audio_url = voice_data.get("preview_audio_url", "")
 
-        if not original_id or not avatar_url:
+        if not original_id or not name:
             continue
 
-        # 从 avatar_url 中提取 UUID
-        # 格式: /files/avatars/vocu/d876307a-7769-4345-be6a-05b5976ac758.webp
-        try:
-            audio_uuid = avatar_url.split("/")[-1].replace(".webp", "")
-        except:
-            continue
+        # 支持两种格式：
+        # 新格式: "audio/角色名.mp3"
+        # 旧格式: "/files/clone/1_xxx/preview.wav"
+        
+        src_audio_file = None
+        
+        if preview_audio_url.startswith("audio/"):
+            # 新格式：直接从 preview_audio_url 获取文件名
+            audio_filename = preview_audio_url.replace("audio/", "")
+            src_audio_file = src_audio_dir / audio_filename
+        elif preview_audio_url.startswith("/files/"):
+            # 旧格式：从 avatar_url 提取 UUID
+            avatar_url = voice_data.get("avatar_url", "")
+            try:
+                audio_uuid = avatar_url.split("/")[-1].split(".")[0]
+                src_audio_file = src_audio_dir / f"{audio_uuid}_default.mp3"
+            except:
+                pass
+        else:
+            # 尝试直接用角色名查找
+            for ext in [".mp3", ".wav"]:
+                test_file = src_audio_dir / f"{name}{ext}"
+                if test_file.exists():
+                    src_audio_file = test_file
+                    break
 
-        # 查找匹配的音频文件 (格式: {audio_uuid}_default.mp3)
-        src_audio_file = src_audio_dir / f"{audio_uuid}_default.mp3"
-        if not src_audio_file.exists():
+        if not src_audio_file or not src_audio_file.exists():
             continue
 
         # 目标路径: /data/clone/1_{original_id}/preview.wav
@@ -159,16 +178,30 @@ async def import_voices():
                 if existing_clone_job:
                     skipped += 1
                     continue
-                # 处理 preview_audio_url: 从 /files/... 转换为本地路径
+                # 处理 preview_audio_url: 支持新旧两种格式
                 preview_audio_url = voice_data.get("preview_audio_url", "")
                 preview_audio_path = ""
-                if preview_audio_url and preview_audio_url.startswith("/files/"):
-                    # 转换 /files/xxx 为 DATA_DIR/xxx
-                    preview_audio_path = str(
-                        DATA_DIR / preview_audio_url.replace("/files/", "")
-                    )
+                
+                if preview_audio_url:
+                    if preview_audio_url.startswith("/files/"):
+                        # 旧格式: /files/clone/1_xxx/preview.wav
+                        preview_audio_path = str(
+                            DATA_DIR / preview_audio_url.replace("/files/", "")
+                        )
+                    else:
+                        # 新格式: audio/角色名.mp3 或 avatars/角色名.jpg
+                        # 转换为实际存储路径: /data/clone/1_{original_id}/preview.wav
+                        preview_audio_path = str(
+                            DATA_DIR / "clone" / f"1_{original_id}" / "preview.wav"
+                        )
 
+                # 处理 avatar_url: 支持相对路径和绝对路径
                 avatar_url = voice_data.get("avatar_url", "")
+                if avatar_url and not avatar_url.startswith("/files/"):
+                    # 新格式: avatars/角色名.jpg -> /files/avatars/vocu/角色名.jpg
+                    if avatar_url.startswith("avatars/"):
+                        filename = avatar_url.replace("avatars/", "")
+                        avatar_url = f"/files/avatars/vocu/{filename}"
                 description = voice_data.get("description", "")
                 tags = voice_data.get("tags", [])
 

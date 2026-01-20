@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-导入Vocu社区市场语音数据到数据库
+导入 FGO training_data 转换后的语音数据到数据库
 用法: 在 Docker 容器内执行此脚本
 数据将导入到社区市场（/console/voices/public）
-每个语音将归属于其对应的作者用户
+所有语音将归属于 "FGO Dataset" 作者
 """
 
 import os
@@ -22,8 +22,8 @@ from app.core.db import AsyncSessionLocal
 from app.core.models import User, Voice, CloneJob, JobStatus
 
 # 配置
-VOCU_MARKET_DATA_DIR = Path("/app/vocu_market_data")  # Docker容器内的路径
-VOCU_MARKET_DATA_JSON = VOCU_MARKET_DATA_DIR / "voices_data.json"
+TRAINING_DATA_CONVERTED_DIR = Path("/app/training_data_converted")  # Docker容器内的路径
+TRAINING_DATA_JSON = TRAINING_DATA_CONVERTED_DIR / "voices_data.json"
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))  # 实际数据目录
 
 # 用户缓存，避免重复查询
@@ -31,9 +31,9 @@ user_cache: Dict[str, User] = {}
 
 
 def copy_voice_avatar_files():
-    """复制语音角色头像文件从 vocu_market_data 到 data 目录"""
-    src_avatars_dir = VOCU_MARKET_DATA_DIR / "voice_avatars"
-    dest_avatars_dir = DATA_DIR / "avatars" / "vocu_market"
+    """复制语音角色头像文件从 training_data_converted 到 data 目录"""
+    src_avatars_dir = TRAINING_DATA_CONVERTED_DIR / "voice_avatars"
+    dest_avatars_dir = DATA_DIR / "avatars" / "fgo_dataset"
 
     if not src_avatars_dir.exists():
         print(f"⚠️  源语音头像目录不存在: {src_avatars_dir}")
@@ -55,7 +55,7 @@ def copy_voice_avatar_files():
 
 def copy_preview_audio_files(voices_data):
     """复制预览音频文件"""
-    src_audio_dir = VOCU_MARKET_DATA_DIR / "audios"  # 修复：正确的目录名是 audios
+    src_audio_dir = TRAINING_DATA_CONVERTED_DIR / "audios"
 
     if not src_audio_dir.exists():
         print(f"⚠️  源音频目录不存在: {src_audio_dir}")
@@ -98,13 +98,12 @@ async def get_or_create_user(session, author_id: str, author_name: str) -> User:
 
     if not user:
         # 创建新用户
-        # 使用 author_id 作为邮箱的一部分
-        email = f"vocu_user_{author_id}@vocu.market"
+        email = f"fgo_dataset_{author_id}@tts.local"
         user = User(
             uuid=author_id,
-            display_name=author_name,  # 使用 display_name 而不是 username
+            display_name=author_name,
             email=email,
-            password_hash="",  # 正确的字段名，这些用户不能登录，只是作为语音的所有者
+            password_hash="",  # 这些用户不能登录，只是作为语音的所有者
             is_admin=False,
         )
         session.add(user)
@@ -115,25 +114,25 @@ async def get_or_create_user(session, author_id: str, author_name: str) -> User:
     return user
 
 
-async def import_market_voices():
-    """导入社区市场语音到数据库"""
+async def import_training_voices():
+    """导入 FGO training_data 转换后的语音到数据库"""
 
     # 检查数据文件是否存在
-    if not VOCU_MARKET_DATA_JSON.exists():
-        print(f"❌ 找不到数据文件: {VOCU_MARKET_DATA_JSON}")
-        print("请确保 vocu_market_data 文件夹已挂载到容器中")
+    if not TRAINING_DATA_JSON.exists():
+        print(f"❌ 找不到数据文件: {TRAINING_DATA_JSON}")
+        print("请确保 training_data_converted 文件夹已挂载到容器中")
         return
 
     # 读取数据
-    print(f"📖 读取数据文件: {VOCU_MARKET_DATA_JSON}")
-    with open(VOCU_MARKET_DATA_JSON, "r", encoding="utf-8") as f:
+    print(f"📖 读取数据文件: {TRAINING_DATA_JSON}")
+    with open(TRAINING_DATA_JSON, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     # 兼容两种格式：直接数组或 {"data": [...]}
     voices_data = data if isinstance(data, list) else data.get("data", [])
 
     print("\n" + "=" * 70)
-    print("🚀 开始导入社区市场语音数据到数据库")
+    print("🚀 开始导入 FGO 训练数据集语音到数据库")
     print("=" * 70)
     print(f"📊 总计: {len(voices_data)} 个语音角色")
 
@@ -148,7 +147,7 @@ async def import_market_voices():
     print(f"✅ 已复制 {audio_copied_count} 个预览音频文件\n")
 
     async with AsyncSessionLocal() as session:
-        print("开始导入社区市场语音数据...\n")
+        print("开始导入 FGO 训练数据集语音...\n")
 
         imported = 0
         failed = 0
@@ -160,15 +159,15 @@ async def import_market_voices():
             vocu_original_id = voice_data.get("vocu_original_id")
             name = voice_data.get("name")
             author_id = voice_data.get("author_id")
-            author_name = voice_data.get("author_name", "未知用户")
+            author_name = voice_data.get("author_name", "FGO Dataset")
 
             # 跳过没有必要字段的记录
             if not clone_job_uuid or not name or not author_id:
                 skipped += 1
                 continue
 
-            if imported % 50 == 0 and imported > 0:
-                print(f"[进度] 已导入 {imported} 个，创建用户 {created_users} 个...")
+            if imported % 5 == 0 and imported > 0:
+                print(f"[进度] 已导入 {imported} 个...")
 
             try:
                 # 检查是否已存在（避免重复导入）
@@ -197,12 +196,12 @@ async def import_market_voices():
                     # 同一作者已有同名语音，添加后缀区分
                     name = f"{name}_{vocu_original_id[:8]}"
 
-                # 处理头像URL - 使用 voice_avatar_file
+                # 处理头像URL - 使用 voice_avatar_file，路径改为 fgo_dataset
                 avatar_url = ""
                 voice_avatar_file = voice_data.get("voice_avatar_file")
                 if voice_avatar_file:
                     # 转换为本地路径格式
-                    avatar_url = f"/files/avatars/vocu_market/{voice_avatar_file}"
+                    avatar_url = f"/files/avatars/fgo_dataset/{voice_avatar_file}"
 
                 # 处理预览音频路径
                 preview_audio_path = ""
@@ -217,28 +216,28 @@ async def import_market_voices():
                 usage_count = voice_data.get("usage_count", 0)
                 generated_chars_count = voice_data.get("characters_used", 0)
 
-                # 先创建 CloneJob 记录，使用作者用户ID
+                # 先创建 CloneJob 记录
                 clone_job = CloneJob(
                     uuid=clone_job_uuid,
-                    user_id=author_user.id,  # 使用作者用户ID
+                    user_id=author_user.id,
                     voice_name=name,
                     avatar_url=avatar_url,
                     description=description,
                     tags=tags,
-                    is_public=True,  # 社区市场的语音都是公开的
+                    is_public=True,  # FGO 数据集的语音都是公开的
                     remove_background_noise=False,
                     status=JobStatus.succeeded,
                     error="",
                     dataset_dir="",
-                    result_voice_uuid=vocu_original_id,  # 指向生成的 Voice
+                    result_voice_uuid=vocu_original_id,
                     external_request_id="",
                 )
                 session.add(clone_job)
 
-                # 创建Voice记录 - 使用 vocu_original_id 作为 uuid，使用作者用户ID
+                # 创建 Voice 记录
                 voice = Voice(
                     uuid=vocu_original_id,
-                    owner_user_id=author_user.id,  # 使用作者用户ID
+                    owner_user_id=author_user.id,
                     name=name,
                     avatar_url=avatar_url,
                     description=description,
@@ -255,11 +254,12 @@ async def import_market_voices():
                 await session.flush()
                 await session.commit()
 
+                print(f"  ✅ [{i}/{len(voices_data)}] {name}")
                 imported += 1
 
             except Exception as e:
                 await session.rollback()
-                print(f"  ❌ [{i}] {name} (作者: {author_name}): {e}")
+                print(f"  ❌ [{i}/{len(voices_data)}] {name}: {e}")
                 failed += 1
 
     print("\n" + "=" * 70)
@@ -273,7 +273,7 @@ async def import_market_voices():
 
 
 def main():
-    asyncio.run(import_market_voices())
+    asyncio.run(import_training_voices())
 
 
 if __name__ == "__main__":
