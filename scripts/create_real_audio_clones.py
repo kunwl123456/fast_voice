@@ -21,7 +21,7 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 VOCU_DATA_DIR = PROJECT_ROOT / "vocu_data"
 VOCU_DATA_JSON = VOCU_DATA_DIR / "voices_data.json"
-API_BASE_URL = "http://192.168.1.5:4000"  # 音频创建 API
+API_BASE_URL = "http://192.168.1.114:4000"  # 音频创建 API
 
 
 async def create_voice_via_api(session: aiohttp.ClientSession, voice_data: dict) -> str:

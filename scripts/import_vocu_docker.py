@@ -32,7 +32,7 @@ DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))  # 实际数据目录
 def copy_avatar_files():
     """复制头像文件从 vocu_data 到 data 目录"""
     src_avatars_dir = VOCU_DATA_DIR / "avatars"  # 头像直接在 avatars 下
-    dest_avatars_dir = DATA_DIR / "avatars" / "vocu"  # 目标在 avatars/vocu 下
+    dest_avatars_dir = DATA_DIR / "avatars" / "duby"  # 目标在 avatars/duby 下
 
     if not src_avatars_dir.exists():
         print(f"⚠️  源头像目录不存在: {src_avatars_dir}")
@@ -198,10 +198,10 @@ async def import_voices():
                 # 处理 avatar_url: 支持相对路径和绝对路径
                 avatar_url = voice_data.get("avatar_url", "")
                 if avatar_url and not avatar_url.startswith("/files/"):
-                    # 新格式: avatars/角色名.jpg -> /files/avatars/vocu/角色名.jpg
+                    # 新格式: avatars/角色名.jpg -> /files/avatars/duby/角色名.jpg
                     if avatar_url.startswith("avatars/"):
                         filename = avatar_url.replace("avatars/", "")
-                        avatar_url = f"/files/avatars/vocu/{filename}"
+                        avatar_url = f"/files/avatars/duby/{filename}"
                 description = voice_data.get("description", "")
                 tags = voice_data.get("tags", [])
 
