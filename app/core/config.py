@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # 通过环境变量 TEST_INVITE_CODE 设置
     test_invite_code: str | None = None
 
-    auto_create_db: bool = True
+    auto_create_db: bool = False
     admin_bootstrap: bool = True
     data_dir: str = "./data"
 

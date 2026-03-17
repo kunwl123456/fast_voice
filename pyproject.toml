@@ -24,6 +24,7 @@ dependencies = [
   "aiofiles==24.1.0",
   "stripe==11.3.0",
   "httpx==0.28.1",
+  "alibabacloud-oss-v2",
 ]
 
 [project.optional-dependencies]
