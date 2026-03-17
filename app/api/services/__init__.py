@@ -1,1 +1,1 @@
-__all__ = ["billing", "bootstrap", "idempotency", "kv", "storage"]
+__all__ = ["billing", "bootstrap", "idempotency", "kv", "oss_storage", "storage"]
