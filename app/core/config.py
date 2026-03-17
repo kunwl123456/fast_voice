@@ -65,9 +65,22 @@ class Settings(BaseSettings):
     payment_callback_url: str | None = (
         None  # 支付完成回调地址（支付中台调用此地址通知结果）
     )
+    refund_callback_url: str | None = (
+        None  # 退款回调地址（支付中台调用此地址通知退款结果）
+    )
     payment_callback_secret: str | None = (
         None  # 支付中台回调签名密钥（用于验证回调合法性）
     )
+
+    # 阿里云 OSS 配置
+    oss_region: str | None = None
+    oss_bucket: str | None = None
+    oss_access_key_id: str | None = None
+    oss_access_key_secret: str | None = None
+    oss_endpoint: str | None = None
+    oss_use_cname: bool = False
+    oss_public_base_url: str | None = None
+    oss_presign_expires_seconds: int = 3600
 
 
 settings = Settings()

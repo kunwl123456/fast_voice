@@ -26,10 +26,15 @@ celery_app.conf.update(
     imports=("app.tasks.jobs",),  # 确保 worker 注册任务
 )
 celery_app.conf.beat_schedule = {
-    # 每月1号凌晨3点执行积分续赠
+    # 每日凌晨3点执行积分续赠检查（Anniversary 轮询）
     "renew-monthly-credits": {
         "task": "app.tasks.subscription_renewal.renew_monthly_credits_task",
-        "schedule": crontab(day_of_month="1", hour="3", minute="0"),
+        "schedule": crontab(hour="3", minute="0"),
+    },
+    # 每日凌晨4点检查过期订阅
+    "check-expired-subscriptions": {
+        "task": "app.tasks.subscription_renewal.check_expired_subscriptions_task",
+        "schedule": crontab(hour="4", minute="0"),
     },
 }
 

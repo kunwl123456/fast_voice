@@ -41,7 +41,10 @@ from app.tools.common import tz_now
 from app.core.error_codes import OrderError, RefundError
 from app.api.services.plan_config import get_plan_config_by_id
 from app.core.exceptions import BadRequestException, NotFoundException
-from app.api.services.billing import recharge as recharge_credits
+from app.api.services.billing import (
+    recharge as recharge_credits,
+    revoke_credits,
+)
 from app.api.services.payment_gateway_client import (
     get_payment_gateway_client,
     PaymentGatewayError,
@@ -442,6 +445,7 @@ async def create_refund(
             payment_id=order.payment_id,
             refund_amount=payload.refund_amount,
             reason=payload.reason,
+            notify_url=settings.refund_callback_url,
         )
 
         # 仅记录退款申请信息，订单状态由回调确认
@@ -588,16 +592,22 @@ async def handle_payment_callback(db: AsyncSession, payload: dict) -> bool:
                 if is_fulfilled:
                     order.status = OrderStatus.fulfilled
                 else:
-                    order.status = OrderStatus.failed
+                    # 履约失败，但支付已成功。
+                    # 保持为 paid，记录错误信息，后续需监控报警并人工/脚本补单
+                    order.status = OrderStatus.paid
                     em = order.extra_metadata or {}
                     em["fulfill_error"] = msg or "订单履约失败"
                     order.extra_metadata = em
-            except Exception as _:
-                # 履约失败：记录错误并标记失败，让支付中台按策略重试/人工排查
-                logger.error(f"订单履约失败：{traceback.format_exc()}")
-                order.status = OrderStatus.failed
+                    logger.error(
+                        f"订单支付成功但履约失败: order_no={order.order_no}, error={msg}"
+                    )
+
+            except Exception as e:
+                # 履约异常：记录错误并保持 paid，让支付中台按策略重试/人工排查
+                logger.error(f"订单履约异常：{traceback.format_exc()}")
+                order.status = OrderStatus.paid
                 em = order.extra_metadata or {}
-                em["fulfill_error"] = "订单履约异常"
+                em["fulfill_error"] = f"订单履约异常: {str(e)}"
                 order.extra_metadata = em
 
             db.add(order)
@@ -652,7 +662,21 @@ async def handle_refund_callback(db: AsyncSession, payload: dict) -> bool:
 
     status_norm = str(status).lower()
     if status_norm in ["refunded", "succeeded", "completed"]:
-        order.status = OrderStatus.refunded
+        # 仅当从非 refunded 状态变为 refunded 时执行回滚
+        if order.status != OrderStatus.refunded:
+            order.status = OrderStatus.refunded
+
+            # 执行业务侧权益回滚
+            try:
+                await _rollback_order_benefits(db, order)
+                logger.info(f"订单权益回滚成功: order_no={order.order_no}")
+            except Exception as e:
+                # 回滚失败记录错误，但不阻止状态更新（权益未回收是损失，但不能阻塞流程）
+                logger.error(f"订单权益回滚失败: order_no={order.order_no}, error={e}")
+                em = order.extra_metadata or {}
+                em["rollback_error"] = str(e)
+                order.extra_metadata = em
+
     elif status_norm in ["failed", "canceled", "cancelled"]:
         # 退款失败：恢复为退款前状态（默认回退到 paid）
         em = order.extra_metadata or {}
@@ -812,15 +836,15 @@ async def _fulfill_subscription(db: AsyncSession, order: Order) -> (bool, str):
     user.subscription_ends_at = new_end_time
     db.add(user)
 
-    # 订阅赠送积分：按月数一次性入账（可跨月累积）
-    credits_added = int(getattr(plan_config, "monthly_credits", 0) or 0) * int(months)
+    # 订阅赠送积分：只赠送第1个月积分（后续由定时任务按月续赠）
+    credits_added = int(getattr(plan_config, "monthly_credits", 0) or 0)
     if credits_added > 0:
         # 入账（带行锁，原子增加余额并写流水）
         await recharge_credits(
             db=db,
             user_id=order.user_id,
             amount=credits_added,
-            note=f"订阅{plan_config.name}{months}个月赠送积分",
+            note=f"订阅{plan_config.name}赠送积分（第1个月）",
             ref_id=order.order_no,
             ref_type="subscription",
             tx_type=TxType.subscription,
@@ -832,3 +856,86 @@ async def _fulfill_subscription(db: AsyncSession, order: Order) -> (bool, str):
         f"months={months}, ends_at={new_end_time}, credits_added={credits_added}"
     )
     return True, ""
+
+
+async def _rollback_order_benefits(db: AsyncSession, order: Order) -> None:
+    """
+    回滚订单权益（退款时调用）
+    """
+    if order.order_type == OrderType.credit_recharge:
+        # 1. 积分充值回滚
+        pkg = None
+        if order.product_id:
+            pkg = (
+                await db.execute(
+                    select(CreditPackage).where(CreditPackage.id == order.product_id)
+                )
+            ).scalar_one_or_none()
+
+        # 如果找不到 ID，尝试 code
+        if not pkg:
+            em = order.extra_metadata or {}
+            package_code = em.get("credit_package_code") or em.get("package_code")
+            if package_code:
+                pkg = (
+                    await db.execute(
+                        select(CreditPackage).where(CreditPackage.code == package_code)
+                    )
+                ).scalar_one_or_none()
+
+        credits_to_deduct = 0
+        if pkg:
+            quantity = int(order.quantity or 1)
+            credits_to_deduct = int(pkg.credits) * quantity
+        else:
+            logger.warning(
+                f"回滚积分失败：找不到对应套餐信息 order_no={order.order_no}"
+            )
+            return
+
+        if credits_to_deduct > 0:
+            await revoke_credits(
+                db=db,
+                user_id=order.user_id,
+                amount=credits_to_deduct,
+                ref_type="refund_rollback",
+                ref_id=order.order_no,
+                note=f"订单退款，回收积分: {order.order_no}",
+            )
+
+    elif order.order_type == OrderType.subscription:
+        # 2. 订阅回滚
+        # A. 回收积分（如果有赠送）
+        plan_config = (
+            await get_plan_config_by_id(db, int(order.product_id))
+            if order.product_id
+            else None
+        )
+
+        if plan_config:
+            credits_added = int(getattr(plan_config, "monthly_credits", 0) or 0)
+            if credits_added > 0:
+                await revoke_credits(
+                    db=db,
+                    user_id=order.user_id,
+                    amount=credits_added,
+                    ref_type="refund_rollback",
+                    ref_id=order.order_no,
+                    note=f"订阅退款，回收赠送积分: {order.order_no}",
+                )
+
+        # B. 回退订阅时间
+        result = await db.execute(
+            select(User).where(User.id == order.user_id).with_for_update()
+        )
+        user = result.scalar_one_or_none()
+
+        if user and user.subscription_ends_at:
+            months = order.quantity or 0
+            if months > 0:
+                # 回退天数
+                days_to_reduce = SUBSCRIPTION_DAYS_PER_MONTH * months
+                user.subscription_ends_at = user.subscription_ends_at - timedelta(
+                    days=days_to_reduce
+                )
+                db.add(user)
