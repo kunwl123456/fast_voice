@@ -445,6 +445,7 @@ async def create_refund(
             payment_id=order.payment_id,
             refund_amount=payload.refund_amount,
             reason=payload.reason,
+            notify_url=settings.refund_callback_url,
         )
 
         # 仅记录退款申请信息，订单状态由回调确认

@@ -290,6 +290,7 @@ class PaymentGatewayClient:
         payment_id: UUID | str,
         refund_amount: int | None = None,
         reason: str | None = None,
+        notify_url: str | None = None,
     ) -> RefundResult:
         """
         创建退款
@@ -298,6 +299,7 @@ class PaymentGatewayClient:
             payment_id: 支付ID
             refund_amount: 退款金额(最小货币单位,不填则全额退款)
             reason: 退款原因
+            notify_url: 退款回调通知地址
 
         Returns:
             退款结果
@@ -315,6 +317,8 @@ class PaymentGatewayClient:
             request_data["refund_amount"] = refund_amount
         if reason:
             request_data["reason"] = reason
+        if notify_url:
+            request_data["notify_url"] = notify_url
 
         try:
             response = await self._request("POST", "/v1/refunds", request_data)
